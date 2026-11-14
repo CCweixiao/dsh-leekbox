@@ -1,7 +1,7 @@
 // 韭菜盒子 LeekBox — 客户端 bundle 源码：个股详情弹窗（K线/分时/资金流/F10）
 // 由 build.mjs 打包进 lib/client.js（npm run build）；不要手改产物。
 import { h, useEffect, useRef, useState } from "./react.js";
-import { API, api, cnMarket, describeError, fmt, fmtAmount, fmtPct, fmtSign, fmtTime, fmtVol, fmtYi, notifyFailure, trend, useTradingInterval } from "./core.js";
+import { API, api, cnMarket, describeError, fmt, fmtAmount, fmtPct, fmtSign, fmtTime, fmtVol, fmtYi, marketSession, notifyFailure, trend, useTradingInterval } from "./core.js";
 
 const UP_COLOR = "#e03131";
 const DOWN_COLOR = "#0f9d6e";
@@ -525,6 +525,28 @@ function Yoy({ v }) {
 	return h("span", { className: `lkb-pct lkb-yoy ${trend(v)}` }, fmtPct(v));
 }
 
+/** 分时「实时跟走」状态灯：交易时段呼吸绿点 + 最近成功刷新时间；
+ *  失败转黄点提示；盘后静态灰点（不轮询，显示的是快照）。 */
+function LiveChip({ live }) {
+	const open = marketSession().open;
+	let dotCls;
+	let text;
+	if (!open) {
+		dotCls = "lkb-liveDot";
+		text = `已收盘 · 快照${live ? ` ${new Date(live.ts).toLocaleTimeString("zh-CN", { hour12: false })}` : ""}`;
+	} else if (live === null) {
+		dotCls = "lkb-liveDot";
+		text = "连接中…";
+	} else if (live.ok) {
+		dotCls = "lkb-liveDot lkb-liveOn";
+		text = `自动跟随 · ${new Date(live.ts).toLocaleTimeString("zh-CN", { hour12: false })}`;
+	} else {
+		dotCls = "lkb-liveDot lkb-liveWarn";
+		text = "刷新失败 · 自动重试";
+	}
+	return h("span", { className: "lkb-liveChip", title: "每 10 秒自动刷新（仅交易时段）" }, h("i", { className: dotCls, "aria-hidden": "true" }), text);
+}
+
 /**
  * 财务摘要 F10：最新期指标瓦片 + 瘦身明细表。
  * 以前是一张 9 列 × 8 行的 11px 素表格，一眼扫不出重点；现在最关心的
@@ -640,6 +662,10 @@ export function StockDetailWindow({ code, name, isIndex, x, y, z, onFocus, onClo
 	const [fflowErr, setFflowErr] = useState("");
 	const [f10Err, setF10Err] = useState("");
 	const [extraTick, setExtraTick] = useState(0);
+	// K线/分时手动刷新计数（>0 后请求带 force=1 绕过服务端缓存）。
+	const [kTick, setKTick] = useState(0);
+	// 分时自动跟走的刷新状态（驱动 LiveChip 的呼吸灯与时间戳）。
+	const [minuteLive, setMinuteLive] = useState(null);
 	const [error, setError] = useState("");
 	const [kError, setKError] = useState("");
 	const cardRef = useRef(null);
@@ -657,11 +683,13 @@ export function StockDetailWindow({ code, name, isIndex, x, y, z, onFocus, onClo
 	useEffect(() => {
 		let alive = true;
 		setKError("");
+		const force = kTick > 0 ? "&force=1" : "";
 		if (period === "m1") {
 			api(API.minute + `?code=${code}`).then((d) => {
 				if (alive) {
 					setMinute(d ?? null);
 					setKlines([]);
+					setMinuteLive({ ts: Date.now(), ok: true });
 				}
 			}).catch((e) => {
 				if (alive) {
@@ -674,7 +702,8 @@ export function StockDetailWindow({ code, name, isIndex, x, y, z, onFocus, onClo
 			};
 		}
 		setMinute(null);
-		api(API.kline + `?code=${code}&period=${period}&count=120&fq=qfq`).then((d) => {
+		setMinuteLive(null);
+		api(API.kline + `?code=${code}&period=${period}&count=120&fq=qfq${force}`).then((d) => {
 			if (alive) setKlines(d.klines ?? []);
 		}).catch((e) => {
 			if (alive) {
@@ -685,7 +714,23 @@ export function StockDetailWindow({ code, name, isIndex, x, y, z, onFocus, onClo
 		return () => {
 			alive = false;
 		};
-	}, [code, period]);
+	}, [code, period, kTick]);
+	// 分时自动跟走：仅分时视图参与，10s 一轮（上游分钟级出点、服务端缓存
+	// 已压到 10s；交易时段/页面可见性由 useTradingInterval 统一门控）。
+	// 独立于上面的按需加载 effect——手动「刷新」走 force，这里走缓存节拍。
+	useTradingInterval(
+		() => {
+			if (period !== "m1") return;
+			api(API.minute + `?code=${code}`)
+				.then((d) => {
+					setMinute(d ?? null);
+					setMinuteLive({ ts: Date.now(), ok: true });
+				})
+				.catch(() => setMinuteLive({ ts: Date.now(), ok: false }));
+		},
+		10000,
+		[code, period]
+	);
 	useEffect(() => {
 		let alive = true;
 		setFflowErr("");
@@ -824,18 +869,25 @@ export function StockDetailWindow({ code, name, isIndex, x, y, z, onFocus, onClo
 					h(
 						"span",
 						{ className: "lkb-periodRow" },
+						period === "m1" ? h(LiveChip, { live: minuteLive }) : null,
 						["day", "week", "month", "m1", "m5", "m15", "m30", "m60"].map(
 							(p) => h("button", { key: p, className: "lkb-period", "data-active": period === p ? "true" : "false", onClick: () => setPeriod(p) }, { day: "日K", week: "周K", month: "月K", m1: "分时", m5: "5分", m15: "15分", m30: "30分", m60: "60分" }[p])
-						)
+						),
+						h("button", { className: "lkb-refreshBtn", title: "重新拉取（绕过缓存）", onClick: () => setKTick((v) => v + 1) }, "⟳ 刷新")
 					)
 				),
-				kError === "" ? null : h("div", { className: "lkb-error" }, kError),
+				kError === "" ? null : h("div", { className: "lkb-error" }, kError, h("button", { className: "lkb-btnGhost", style: { marginLeft: 8 }, onClick: () => setKTick((v) => v + 1) }, "重试")),
 				period === "m1" ? h(MinuteChart, { points: minute?.points, prevClose: q?.prevClose, date: minute?.date }) : h(KlineChart, { klines })
 			),
 			fflow !== null && fflow.length > 0 ? h(
 				"div",
 				{ className: "lkb-chartBox" },
-				h("div", { className: "lkb-chartTitle" }, "资金流向（主力净流入柱状图，单位：亿）"),
+				h(
+					"div",
+					{ className: "lkb-chartTitle" },
+					"资金流向（主力净流入柱状图，单位：亿）",
+					h("button", { className: "lkb-refreshBtn", title: "重新拉取（绕过缓存）", onClick: () => setExtraTick((v) => v + 1) }, "⟳ 刷新")
+				),
 				h(FflowChart, { rows: fflow.slice(-15) })
 			) : fflowErr === "" ? null : h(
 				"div",

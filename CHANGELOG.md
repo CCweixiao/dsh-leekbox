@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.25.0] - 2026-11-14
+
+### Added
+
+- **分时图自动跟走**：分时视图下每 **10 秒**自动刷新（仅交易时段 + 页面可见，`useTradingInterval` 统一门控；服务端分时缓存同步压到 10s，多开详情窗经单飞合并不放大上游压力）。刷新状态灯：交易时段**绿色呼吸灯 + 最近成功刷新时间**（`自动跟随 · 14:32:10`），失败转黄点提示自动重试，盘后静态灰点标注「已收盘 · 快照」。
+- **K 线 / 资金流向手动「⟳ 刷新」按钮**：点击带 `force=1` 请求——路由侧 TTL 归 0 强制重拉上游，新值照常写回缓存（write-through），后续普通请求拿到的是刚刷新的新值；资金流错误分支的重试也走同一链路。
+
 ## [0.24.0] - 2026-11-14
 
 ### Changed

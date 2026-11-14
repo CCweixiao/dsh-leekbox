@@ -301,6 +301,25 @@ body[data-ds-dark-theme] .lkb-kTip b,body[data-ds-dark-theme] .lkb-kTip .tipDate
 /* K线缩放后的「全览」复位按钮:右上角浮层,仅在缩放/平移后出现。 */
 .lkb-kzoomReset{position:absolute;top:6px;right:52px;z-index:5;border:1px solid var(--dsw-alias-border-l1,#e0e2e8);background:var(--dsw-alias-bg-overlay,#fff);color:var(--dsw-alias-label-secondary,#5f6672);border-radius:8px;padding:2px 8px;font-size:11px;line-height:1.4;cursor:pointer}
 .lkb-kzoomReset:hover{color:var(--dsw-alias-label-primary,#1c1e26);border-color:var(--dsw-alias-border-l2,#c9ccd6)}
+/* 分时「实时跟走」状态灯:交易时段绿点呼吸,失败黄点,盘后灰点。 */
+.lkb-liveChip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:var(--dsw-alias-label-tertiary,#a2a7b3);background:var(--dsw-alias-bg-subtle,#f4f5f7);border-radius:999px;padding:2px 9px 2px 7px;margin-right:8px;font-variant-numeric:tabular-nums}
+body[data-ds-dark-theme] .lkb-liveChip{background:#ffffff0d}
+.lkb-liveDot{width:7px;height:7px;border-radius:50%;background:#adb5bd;flex:none}
+.lkb-liveDot.lkb-liveOn{background:#0f9d6e;animation:lkb-breathe 2s ease-in-out infinite}
+.lkb-liveDot.lkb-liveWarn{background:#f08c00;animation:lkb-breathe 1s ease-in-out infinite}
+@keyframes lkb-breathe{
+	0%,100%{opacity:1;box-shadow:0 0 0 0 #0f9d6e40}
+	50%{opacity:.55;box-shadow:0 0 0 3px #0f9d6e20}
+}
+.lkb-liveDot.lkb-liveWarn{animation-name:lkb-breatheWarn}
+@keyframes lkb-breatheWarn{
+	0%,100%{opacity:1;box-shadow:0 0 0 0 #f08c0040}
+	50%{opacity:.55;box-shadow:0 0 0 3px #f08c0020}
+}
+/* K线/资金流手动「⟳ 刷新」小按钮(绕过缓存直接拉上游) */
+.lkb-refreshBtn{border:1px solid var(--dsw-alias-border-l1,#e0e2e8);background:var(--dsw-alias-bg-overlay,#fff);color:var(--dsw-alias-label-secondary,#5f6672);border-radius:8px;padding:2px 8px;font-size:11px;line-height:1.4;cursor:pointer;white-space:nowrap}
+.lkb-refreshBtn:hover{color:var(--dsw-alias-label-primary,#1c1e26);border-color:var(--dsw-alias-border-l2,#c9ccd6)}
+.lkb-refreshBtn:active{transform:translateY(1px)}
 .lkb-kaxis{position:relative;height:16px;margin-top:3px;font-size:10.5px;color:var(--dsw-alias-label-tertiary,#a2a7b3);font-variant-numeric:tabular-nums}
 .lkb-kaxis span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}
 /* ---- 当日分时图(价格线+均价线+成交量,左右纵轴标签) ---- */
