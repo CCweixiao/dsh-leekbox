@@ -21,6 +21,7 @@ export const API = {
 	alertEvents: "/api/leekbox/alerts/events",
 	trend: "/api/leekbox/trend",
 	signals: "/api/leekbox/signals",
+	perspectives: "/api/leekbox/perspectives",
 	screener: "/api/leekbox/screener",
 	screenerMeta: "/api/leekbox/screener/meta",
 	screenerEvents: "/api/leekbox/screener/events",

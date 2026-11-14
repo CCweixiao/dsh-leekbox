@@ -144,6 +144,27 @@ export function AnalysisTab({ onOpen }) {
 	const [lastSignal, setLastSignal] = useState(null);
 	const [signals, setSignals] = useState([]);
 	const [sigStats, setSigStats] = useState(null);
+	// 策略视角：追问/首轮可选一个战法框架注入提示词（服务端下发清单，
+	// 本地硬编码兜底——与 screener 信号的「服务端唯一来源」约定一致）。
+	const PERSPECTIVE_FALLBACK = [
+		{ key: "bullTrend", label: "多头趋势" },
+		{ key: "maGoldenCross", label: "均线金叉" },
+		{ key: "volumeBreakout", label: "放量突破" },
+		{ key: "shrinkPullback", label: "缩量回踩" },
+		{ key: "hotTheme", label: "热点题材" },
+		{ key: "dragonHead", label: "龙头战法" },
+		{ key: "chanTheory", label: "缠论结构" },
+		{ key: "waveTheory", label: "波浪理论" },
+		{ key: "emotionCycle", label: "情绪周期" },
+		{ key: "bottomVolume", label: "底部放量" },
+		{ key: "boxOscillation", label: "箱体震荡" },
+		{ key: "oneYangThreeYin", label: "一阳夹三阴" },
+		{ key: "eventDriven", label: "事件驱动" },
+		{ key: "expectationReprice", label: "预期重估" },
+		{ key: "growthQuality", label: "成长质量" },
+	];
+	const [perspectiveList, setPerspectiveList] = useState(PERSPECTIVE_FALLBACK);
+	const [perspective, setPerspective] = useState("");
 
 	// Harness 模型目录（订阅式单例）：挂载时拉一次，模型选择记忆在 localStorage。
 	const catalog = useHarnessModels();
@@ -185,6 +206,14 @@ export function AnalysisTab({ onOpen }) {
 	useEffect(() => {
 		loadSignals();
 	}, [loadSignals]);
+	// 策略视角清单：服务端下发（失败用本地兜底，不影响使用）。
+	useEffect(() => {
+		api(API.perspectives)
+			.then((d) => {
+				if (Array.isArray(d.perspectives) && d.perspectives.length > 0) setPerspectiveList(d.perspectives);
+			})
+			.catch(() => {});
+	}, []);
 	const feedbackSig = (id, useful) => {
 		api(API.signals + "/feedback", { method: "POST", body: { id, useful } })
 			.then(loadSignals)
@@ -347,6 +376,8 @@ export function AnalysisTab({ onOpen }) {
 					.map((t) => ({ role: t.role, content: t.text }))
 				: [];
 			const payload = { code: target.code, name: target.name, klineWindow };
+			// 策略视角：选中后服务端把该战法框架 + 本地技术信号事实注入提示词。
+			if (perspective !== "") payload.perspective = perspective;
 			// 带上 Harness 模型选择；服务端在目录缺失时回退第一个可用模型。
 			const ai = effectiveAiRef.current;
 			if (ai !== null) {
@@ -724,6 +755,28 @@ export function AnalysisTab({ onOpen }) {
 						h("span", { className: "lkb-anLabel" }, "分析模型"),
 						h("span", { className: "lkb-anWindowHint" }, catalog.reason !== "" ? catalog.reason : "尚未检测到已配置模型：请在 DeepSeek Harness 的 设置 → Models 页添加")
 					),
+			// 策略视角：借鉴 daily_stock_analysis 的 agent skills——追问/首轮可选
+			// 一个战法框架（缠论/情绪周期/龙头战法…），服务端注入对应分析套路，
+			// 并附上本地 13 信号的命中事实作确定性依据。留空 = 默认通用分析。
+			picked === null
+				? null
+				: h(
+					"div",
+					{ className: "lkb-anWindowRow" },
+					h("span", { className: "lkb-anLabel" }, "策略视角"),
+					h(
+						"select",
+						{
+							className: "lkb-input",
+							value: perspective,
+							title: perspectiveList.find((p) => p.key === perspective)?.regime ?? "留空则使用默认通用分析视角",
+							onChange: (e) => setPerspective(e.target.value),
+						},
+						h("option", { value: "" }, "默认通用分析"),
+						perspectiveList.map((p) => h("option", { key: p.key, value: p.key }, p.label))
+					),
+					perspective !== "" ? h("span", { className: "lkb-anWindowHint" }, perspectiveList.find((p) => p.key === perspective)?.regime ?? "") : null
+				),
 			// K 线窗口：影响喂给模型的日线根数（进而影响 MA60/MA120 与区间分位
 			// 能否算出）。放在分析按钮下方，改完下次生成生效。
 			picked === null

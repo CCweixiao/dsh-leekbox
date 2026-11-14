@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.27.0] - 2026-11-14
+
+### Added
+
+- **AI 分析「策略视角」**（借鉴 daily_stock_analysis 的 15 个 agent skills）：分析页新增「策略视角」下拉——默认通用分析之外可选 15 个战法框架：多头趋势、均线金叉、放量突破、缩量回踩、热点题材、龙头战法、**缠论结构**（分型→笔→中枢→背驰→三类买卖点）、**波浪理论**（5 浪 3 调整 + 斐波那契定位）、**情绪周期**（换手率五档分位 + 底部特征清单）、底部放量、箱体震荡、一阳夹三阴、事件驱动、预期重估、成长质量。选中后首轮/追问的服务端提示词注入该战法的结构化审题框架与评分参考，并附上**本地代码实时算出的 13 项技术信号命中事实**作确定性依据（减少模型幻觉）。视角清单由服务端 `GET /api/leekbox/perspectives` 下发，客户端本地兜底。
+
 ## [0.26.0] - 2026-11-14
 
 ### Added
