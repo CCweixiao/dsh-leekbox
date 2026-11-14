@@ -8,6 +8,10 @@ const CSS = `
 .lkb_entryLabel{text-overflow:ellipsis;overflow:hidden}
 [data-dsh-frame][data-sidebar-collapsed] .lkb_entry{border-radius:50%;justify-content:center;width:36px;height:36px;margin:0 auto 12px;padding:0}
 [data-dsh-frame][data-sidebar-collapsed] .lkb_entryLabel{display:none}
+/* ---- 底部落点（页脚动作区，设置按钮旁）：横排小按钮里的图标式入口 ---- */
+.lkb_entry.lkb_entryBottom{flex:none;width:36px;height:36px;border-radius:50%;justify-content:center;margin:0;padding:0}
+.lkb_entry.lkb_entryBottom .lkb_entryLabel{display:none}
+.lkb_entry.lkb_entryBottom .lkb_entryIcon{width:20px;height:20px;font-size:15px}
 .lkb_overlay{background:var(--dsw-alias-bg-mask-2,#080a1073);z-index:9999;font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;display:block;position:fixed;inset:0}
 .lkb_card{background:var(--dsw-alias-bg-overlay,#fdfdfd);width:min(980px,94vw);max-width:min(980px,calc(100vw - 16px));height:min(640px,88vh);max-height:88vh;color:var(--dsw-alias-label-primary,#1c1e26);border-radius:14px;flex-direction:column;display:flex;overflow:hidden;box-shadow:0 20px 70px #00000059;position:fixed;z-index:10000;margin:0}
 .lkb_head{background:var(--dsw-alias-bg-base,#fff);align-items:center;gap:12px;padding:12px 18px;display:flex;border-bottom:1px solid var(--dsw-alias-border-l1,#e8e9ed);cursor:grab;touch-action:none;user-select:none}

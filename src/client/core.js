@@ -18,10 +18,10 @@ export const API = {
 	watchlist: "/api/leekbox/watchlist",
 	minute: "/api/leekbox/minute",
 	alerts: "/api/leekbox/alerts",
+	alertEvents: "/api/leekbox/alerts/events",
 	screener: "/api/leekbox/screener",
 	screenerMeta: "/api/leekbox/screener/meta",
 	screenerEvents: "/api/leekbox/screener/events",
-	analysisConfig: "/api/leekbox/analysis/config",
 	analysis: "/api/leekbox/analysis/analyze",
 	analysisStream: "/api/leekbox/analysis/analyze/stream",
 	analysisModels: "/api/leekbox/analysis/models",
@@ -593,67 +593,71 @@ export function ToastStack({ toasts, onDismiss }) {
 
 //#endregion
 
-//#region AI 模型配置（全局单例）
+//#region AI 模型（Harness 目录 + 本地选中记忆）
 
 //
-// 模型配置是「全局设置」而不是「分析页」的一部分：面板头部 ⚙️ 入口打开设置弹窗，
-// 分析页只消费「是否已配置」。这里做一份订阅式单例，让面板、设置弹窗、分析页
-// 共享同一份状态，任何一处 save/load 后其余订阅者立刻同步（模式同 toast/confirm）。
-let analysisCfg = { configured: false, baseUrl: "", model: "", maskedKey: "", api: "openai" };
-const analysisCfgListeners = new Set();
+// 模型能力完全复用 DeepSeek Harness：目录来自宿主 llm 服务（Models 设置页配置的
+// 提供方与模型），本插件不再保存任何 API 地址/密钥。用户在分析页选中的
+// provider+model 记忆在 localStorage，跨会话保留；目录用订阅式单例共享
+//（模式同 toast/confirm），面板与分析页共享同一份状态。
+let harnessModels = { loaded: false, providers: [], reason: "" };
+const harnessModelListeners = new Set();
 
-function publishAnalysisConfig(next) {
-	analysisCfg = next;
-	for (const fn of analysisCfgListeners) {
+function publishHarnessModels(next) {
+	harnessModels = next;
+	for (const fn of harnessModelListeners) {
 		try {
-			fn(analysisCfg);
+			fn(harnessModels);
 		} catch {}
 	}
 }
 
-export function getAnalysisConfig() {
-	return analysisCfg;
+export function getHarnessModels() {
+	return harnessModels;
 }
 
-export function onAnalysisConfig(fn) {
-	analysisCfgListeners.add(fn);
-	return () => analysisCfgListeners.delete(fn);
+export function onHarnessModels(fn) {
+	harnessModelListeners.add(fn);
+	return () => harnessModelListeners.delete(fn);
 }
 
-/** 拉取服务端配置并广播（密钥只回脱敏值）。失败保持原状态，静默。 */
-export function loadAnalysisConfig() {
-	return api(API.analysisConfig)
+/** 拉取宿主模型目录并广播。失败保持原状态，静默。 */
+export function loadHarnessModels() {
+	return api(API.analysisModels, { method: "POST", body: {} })
 		.then((d) =>
-			publishAnalysisConfig({
-				configured: d?.configured === true,
-				baseUrl: d?.baseUrl ?? "",
-				model: d?.model ?? "",
-				maskedKey: d?.apiKey ?? "",
-				api: d?.api === "anthropic" ? "anthropic" : d?.api === "responses" ? "responses" : "openai",
+			publishHarnessModels({
+				loaded: true,
+				providers: Array.isArray(d?.providers) ? d.providers : [],
+				reason: typeof d?.reason === "string" ? d.reason : "",
 			})
 		)
 		.catch(() => {});
 }
 
-/** 保存配置并广播结果；返回 Promise<响应体>（含脱敏密钥）。 */
-export function saveAnalysisConfig(body) {
-	return api(API.analysisConfig, { method: "POST", body }).then((d) => {
-		publishAnalysisConfig({
-			configured: d?.configured === true,
-			baseUrl: d?.baseUrl ?? "",
-			model: d?.model ?? "",
-			maskedKey: d?.apiKey ?? "",
-			api: d?.api === "anthropic" ? "anthropic" : d?.api === "responses" ? "responses" : "openai",
-		});
-		return d;
-	});
+/** 订阅模型目录的 hook：目录变化时自动重渲染。 */
+export function useHarnessModels() {
+	const [models, setModels] = useState(harnessModels);
+	useEffect(() => onHarnessModels(setModels), []);
+	return models;
 }
 
-/** 订阅全局配置的 hook：配置变化时自动重渲染。 */
-export function useAnalysisConfig() {
-	const [cfg, setCfg] = useState(analysisCfg);
-	useEffect(() => onAnalysisConfig(setCfg), []);
-	return cfg;
+const AI_MODEL_KEY = "leekbox.aiModel";
+
+/** 上次选中的 {provider, model}；没有记忆或条目不完整时返回 null。 */
+export function getAiModel() {
+	try {
+		const raw = localStorage.getItem(AI_MODEL_KEY);
+		const parsed = raw === null ? null : JSON.parse(raw);
+		return parsed !== null && typeof parsed === "object" && typeof parsed.provider === "string" && parsed.provider !== "" && typeof parsed.model === "string" && parsed.model !== "" ? parsed : null;
+	} catch {
+		return null;
+	}
+}
+
+export function setAiModel(provider, model) {
+	try {
+		localStorage.setItem(AI_MODEL_KEY, JSON.stringify({ provider, model }));
+	} catch {}
 }
 
 //#endregion

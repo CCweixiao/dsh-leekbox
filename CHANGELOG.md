@@ -3,6 +3,18 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.21.0] - 2026-11-14
+
+### Added
+
+- **宿主侧预警引擎**（借鉴寰镜 MarketLens 的核心设计）：预警求值从浏览器搬进宿主进程——面板关了、网页没开，宿主照常盯盘；规则**常驻 + 冷却期**（默认 30 分钟，可配 0~1440），不再「触发即删除」，触发历史留在事件流（≤200 条，`GET /api/leekbox/alerts/events?since=游标` 增量拉取，游标存 localStorage 跨刷新不重不漏）。新增两类规则：**上穿/下破均线**（MA5/10/20/60，按「昨收 vs 昨MA、现价 vs 今MA」判定真穿越，横盘贴线不误报）与**量比阈值**（volSpike）。求值仅在集合竞价与盘中进行，盘后零上游请求。新模块 `lib/alert-engine.js`（纯逻辑、依赖注入、离线可测）。
+- **只读模型工具**：向 DSH 会话注册 `leekbox_search` / `leekbox_quotes` / `leekbox_kline` / `leekbox_signals` 四个工具——聊天里的 AI 可以直接搜标的、拉行情快照、取前复权日K、跑 13 项技术信号评分。注册走手拼 plain ToolDefinition（不 import 宿主内部包 `@deepseek-ai/dsh-tools`，规避 link 安装的版本漂移），并弱依赖 `tools` 服务（不在则静默跳过，面板不受影响）。工具名带 `leekbox_` 前缀，与寰镜 MarketLens 的 `market_*` 工具可共存。
+
+### Changed
+
+- **AI 分析接入 Harness 模型体系**（0.20.0）：删除插件自带的「API 地址 + 密钥」配置区，模型能力完全复用 DeepSeek Harness（设置 → Models 页配置的适配器，密钥由 Harness 凭据存储管理）；分析页内可直接选择已配置的提供方与模型，流式输出，失败原因可读（无模型 / 认证失败 / 限流）。
+- **侧边栏入口位置可配置**（0.20.0）：⚙️ 设置新增「侧边栏入口位置」（底部 / 顶部，默认底部跟随 DSH 原生入口区），实时生效并持久化。
+
 ## [0.14.0] - 2026-10-11
 
 ### Added

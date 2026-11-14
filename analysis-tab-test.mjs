@@ -308,11 +308,21 @@ function siblingHelpers() {
 		normCode: (c) => String(c ?? ""),
 		trend: () => "",
 		lkbConfirm: gatedConfirm,
+		// Harness 模型目录桩：一条可选项，「分析模型」行与 effectiveAi 都有值。
+		useHarnessModels: () => ({
+			loaded: true,
+			providers: [{ provider: "zai-coding-cn", name: "智谱 GLM", models: [{ id: "glm-5.3-flash", name: "GLM-5.3-Flash" }] }],
+			reason: "",
+		}),
+		getAiModel: () => null,
+		setAiModel: () => {},
+		loadHarnessModels: () => {},
 	};
 	const factory = new Function(
 		"h", "useState", "useEffect", "useRef", "useCallback",
 		"useState2", "useEffect2", "useRef2", "useCallback2",
 		"API", "api", "describeError", "fmt", "fmtPct", "lkbConfirm", "normCode", "trend",
+		"useHarnessModels", "getAiModel", "setAiModel", "loadHarnessModels",
 		"SEARCH_DEBOUNCE_MS",
 		`${cacheBlock}
 		${agoBlock}
@@ -332,6 +342,7 @@ function siblingHelpers() {
 			react.h, react.useState, react.useEffect, react.useRef, react.useCallback,
 			react.useState, react.useEffect, react.useRef, react.useCallback,
 			core.API, core.api, core.describeError, core.fmt, core.fmtPct, core.lkbConfirm, core.normCode, core.trend,
+			core.useHarnessModels, core.getAiModel, core.setAiModel, core.loadHarnessModels,
 			SEARCH_DEBOUNCE_MS
 		);
 	} catch (e) {

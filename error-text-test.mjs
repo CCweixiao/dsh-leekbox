@@ -40,6 +40,10 @@ for (const file of serverFiles) {
 		const value = body.slice(at + "error:".length).trim();
 		// 动态拼接的（userMessage(...)）由它自己的兜底保证中文，这里跳过。
 		if (value.startsWith("userMessage(")) continue;
+		// 常量标识符（全大写，如 HARNESS_LLM_MISSING_HINT）与成员表达式
+		//（choice.error 等）的中文由各自的定义处保证，字面量扫描管不到。
+		const firstToken = value.split(/[\s,}]/)[0];
+		if (/^[A-Z_][A-Z0-9_]*$/.test(firstToken) || /^[a-z_$][\w$]*(\.[\w$]+)+$/.test(firstToken)) continue;
 		check(`lib/${file}:${line} error 字段是中文`, CJK.test(value), value.slice(0, 48));
 	}
 }

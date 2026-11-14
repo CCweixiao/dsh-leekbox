@@ -214,12 +214,20 @@ for (const bad of ["garbage", "2026-13-01", "2026-02-30", "20261009"]) {
 }
 
 resetRouteCachesForTests();
-// 不传 date = 中国的今天（用服务端口径算，避免宿主机时区差异）
-longhuDates = new Set(["2026-10-09"]);
+// 不传 date = 中国的今天（用服务端口径算，避免宿主机时区差异）。
+// 桩日期必须**动态**取"今天起回溯窗口内的首个工作日"——钉死具体日期是
+// 时间炸弹（写测试那天 2026-10-09 在窗口内，一个月后回溯窗口够不着，必挂）。
+import { cnDateStr } from "./lib/calendar.js";
+const todayStr = cnDateStr();
+const probe = new Date(`${todayStr}T00:00:00Z`);
+probe.setUTCDate(probe.getUTCDate() - (probe.getUTCDay() === 0 ? 2 : probe.getUTCDay() === 6 ? 1 : 0));
+const firstWalkDay = probe.toISOString().slice(0, 10);
+longhuDates = new Set([firstWalkDay]);
 res = makeRes();
 await longhuRoute.handler(makeGet(ROUTES.longhu), res);
 assert.strictEqual(res.statusCode, 200, "不传 date 仍可用");
 assert.match(json(res).requestedDate, /^\d{4}-\d{2}-\d{2}$/, "缺省日期回带为 YYYY-MM-DD");
+assert.strictEqual(json(res).requestedDate, todayStr, "缺省起点必须是中国的今天");
 
 resetRouteCachesForTests();
 // 全程无数据 → 报"取不到"，不能返回空表充数

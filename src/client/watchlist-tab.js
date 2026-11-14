@@ -68,13 +68,27 @@ function PositionCell({ value, placeholder, onSave }) {
 }
 
 /** 服务端 ALERT_KINDS 的客户端镜像(见 lib/index.js)。 */
-const ALERT_KIND_LABELS = { above: "价格涨到", below: "价格跌破", pctUp: "涨幅达到", pctDown: "跌幅达到" };
+const ALERT_KIND_LABELS = {
+	above: "价格涨到",
+	below: "价格跌破",
+	pctUp: "涨幅达到",
+	pctDown: "跌幅达到",
+	maUp: "上穿均线",
+	maDown: "下破均线",
+	volSpike: "量比达到",
+};
+
+/** 均线周期的四档选项(与服务端 MA_SPANS 一致)。 */
+const ALERT_MA_SPANS = [5, 10, 20, 60];
 
 function alertLabel(a) {
 	if (a.kind === "above") return `价格涨到 ${fmt(a.price)}`;
 	if (a.kind === "below") return `价格跌破 ${fmt(a.price)}`;
 	if (a.kind === "pctUp") return `涨幅达到 ${fmt(a.pct)}%`;
-	return `跌幅达到 ${fmt(a.pct)}%`;
+	if (a.kind === "pctDown") return `跌幅达到 ${fmt(a.pct)}%`;
+	if (a.kind === "maUp") return `上穿 MA${a.span}`;
+	if (a.kind === "maDown") return `下破 MA${a.span}`;
+	return `量比达到 ${fmt(a.volRatio)}`;
 }
 
 /** Desktop notification; permission is requested lazily when the user adds
@@ -120,22 +134,32 @@ function beep() {
 	} catch {}
 }
 
-/** 内联预警表单:类型 + 数值,提交到 POST /alerts/add;成功后广播
- *  alerts-changed 让预警卡片与看护器立即刷新。错误在表单内显示。 */
+/** 内联预警表单:类型 + 按类型变化的数值输入,提交到 POST /alerts/add;成功后
+ *  广播 alerts-changed 让预警卡片立即刷新。错误在表单内显示。
+ *  规则语义(0.21 起):规则常驻 + 冷却期,不再「触发即删除」。 */
 function AlertForm({ code, name, onDone }) {
 	const [kind, setKind] = useState("above");
 	const [val, setVal] = useState("");
+	const [span, setSpan] = useState(20);
 	const [err, setErr] = useState("");
 	const isPrice = kind === "above" || kind === "below";
+	const isPct = kind === "pctUp" || kind === "pctDown";
+	const isMa = kind === "maUp" || kind === "maDown";
+	const placeholder = isPrice ? "目标价" : isPct ? "涨跌幅%" : "量比≥";
 	const submit = () => {
-		const num = Number(val.trim());
-		if (val.trim() === "" || !Number.isFinite(num) || num <= 0) {
-			setErr(isPrice ? "请输入大于 0 的目标价" : "请输入大于 0 的涨跌幅（%）");
-			return;
-		}
 		const body = { code, name, kind };
-		if (isPrice) body.price = num;
-		else body.pct = num;
+		if (isMa) {
+			body.span = span;
+		} else {
+			const num = Number(val.trim());
+			if (val.trim() === "" || !Number.isFinite(num) || num <= 0) {
+				setErr(isPrice ? "请输入大于 0 的目标价" : isPct ? "请输入大于 0 的涨跌幅（%）" : "请输入 1~30 的量比阈值");
+				return;
+			}
+			if (isPrice) body.price = num;
+			else if (isPct) body.pct = num;
+			else body.volRatio = num;
+		}
 		api(API.alerts + "/add", { method: "POST", body })
 			.then(() => {
 				window.dispatchEvent(new Event("leekbox:alerts-changed"));
@@ -162,88 +186,67 @@ function AlertForm({ code, name, onDone }) {
 			},
 			Object.entries(ALERT_KIND_LABELS).map(([k, label]) => h("option", { key: k, value: k }, label))
 		),
-		h("input", {
-			className: "lkb-input",
-			style: { width: 90, padding: "3px 6px", fontSize: 11 },
-			value: val,
-			autoFocus: true,
-			placeholder: isPrice ? "目标价" : "涨跌幅%",
-			onClick: (e) => e.stopPropagation(),
-			onChange: (e) => {
-				setVal(e.target.value);
-				setErr("");
-			},
-			onKeyDown: (e) => {
-				e.stopPropagation();
-				if (e.key === "Enter") submit();
-			},
-		}),
+		isMa
+			? h(
+				"select",
+				{
+					className: "lkb-input",
+					style: { width: 90, padding: "3px 6px", fontSize: 11 },
+					value: span,
+					onClick: (e) => e.stopPropagation(),
+					onChange: (e) => setSpan(Number(e.target.value)),
+				},
+				ALERT_MA_SPANS.map((s) => h("option", { key: s, value: s }, `MA${s}`))
+			)
+			: h("input", {
+				className: "lkb-input",
+				style: { width: 90, padding: "3px 6px", fontSize: 11 },
+				value: val,
+				autoFocus: true,
+				placeholder,
+				onClick: (e) => e.stopPropagation(),
+				onChange: (e) => {
+					setVal(e.target.value);
+					setErr("");
+				},
+				onKeyDown: (e) => {
+					e.stopPropagation();
+					if (e.key === "Enter") submit();
+				},
+			}),
 		h("button", { className: "lkb-btnGhost", onClick: submit }, "确定"),
 		h("button", { className: "lkb-btnGhost", onClick: onDone }, "取消"),
 		err === "" ? null : h("span", { className: "lkb-status" }, err)
 	);
 }
 
-/** 预警看护:与行情同一时钟轮询(仅交易时段),触发后 toast + 系统通知 +
- *  蜂鸣,并把该条预警从服务端移除(一次性)。判定在客户端做——服务端只
- *  负责存取,不常驻计时器、不引入推送通道。
+/** 预警看护(0.21 起只做「播报」):求值已搬到宿主侧(./alert-engine.js)——
+ *  面板开不开宿主都在盯盘;这里按交易时段轮询事件流(带游标增量),新事件
+ *  toast + 系统通知 + 蜂鸣。游标存 localStorage,跨页面刷新不重不漏。
  *
  *  它**必须随插件常驻**（由 entry.js 的 mountAlertWatcher 挂载），不能挂在
  *  面板里：面板关闭走 root.unmount()，挂在里面的看护会一起卸载，于是"交易
  *  时段自动盯盘"在面板关掉后静默失效（README 承诺过这个行为）。 */
 export function AlertWatcher({ push }) {
-	const alertsRef = useRef([]);
+	const cursorRef = useRef(Number(localStorage.getItem("leekbox.alertCursor") ?? 0) || 0);
 	const notify = push ?? pushToast;
-	const load = useCallback(() => {
-		api(API.alerts)
-			.then((d) => {
-				alertsRef.current = d.alerts ?? [];
-			})
-			.catch(() => {});
-	}, []);
-	useEffect(() => {
-		load();
-		window.addEventListener("leekbox:alerts-changed", load);
-		return () => window.removeEventListener("leekbox:alerts-changed", load);
-	}, [load]);
 	useTradingInterval(
 		() => {
-			const list = alertsRef.current;
-			if (list.length === 0) return;
-			const codes = Array.from(new Set(list.map((a) => a.code)));
-			const chunks = [];
-			for (let i = 0; i < codes.length; i += 50) chunks.push(codes.slice(i, i + 50).join(","));
-			Promise.all(chunks.map((c) => api(API.quote + `?codes=${c}`)))
-				.then((parts) => {
-					const byCode = new Map(parts.flatMap((p) => p.quotes ?? []).map((q) => [q.code, q]));
-					const fired = [];
-					for (const a of list) {
-						const qt = byCode.get(a.code);
-						if (qt === void 0) continue;
-						const px = qt.price;
-						const pct = qt.changePct;
-						const hit =
-							a.kind === "above"
-								? px !== null && px !== void 0 && px >= a.price
-								: a.kind === "below"
-									? px !== null && px !== void 0 && px <= a.price
-									: a.kind === "pctUp"
-										? pct !== null && pct !== void 0 && pct >= a.pct
-										: pct !== null && pct !== void 0 && pct <= -a.pct;
-						if (hit) fired.push({ alert: a, quote: qt });
+			api(API.alertEvents + `?since=${cursorRef.current}`)
+				.then((d) => {
+					const events = Array.isArray(d.events) ? d.events : [];
+					if (events.length === 0) return;
+					const cursor = Number(d.cursor) || events[events.length - 1].seq;
+					cursorRef.current = cursor;
+					localStorage.setItem("leekbox.alertCursor", String(cursor));
+					const names = [];
+					for (const ev of events.slice(-5)) {
+						// 事件里带触发时刻的规则文案与价格快照（规则可能已被删）。
+						notify(`🔔 ${ev.label} —— ${ev.name}(${ev.code}) 现价 ${fmt(ev.price)} / ${fmtPct(ev.changePct)}`);
+						names.push(`${ev.name} ${ev.label}`);
 					}
-					if (fired.length === 0) return;
-					for (const { alert, quote } of fired) {
-						// 一次性预警：取消失败就下轮再试（不提示——用户并没有
-						// 主动删它，重复弹一条"删除失败"只会干扰；预警本身已经
-						// 通知过了）。
-						api(API.alerts + "/remove", { method: "POST", body: { id: alert.id } }).catch(() => {});
-						notify(`🔔 ${alertLabel(alert)} —— ${alert.name}(${alert.code}) 现价 ${fmt(quote.price)} / ${fmtPct(quote.changePct)}`);
-						notifyDesktop(`价格预警：${alert.name}`, `${alertLabel(alert)} · 现价 ${fmt(quote.price)}`);
-					}
+					notifyDesktop("价格预警", names.join("；"));
 					beep();
-					alertsRef.current = alertsRef.current.filter((a) => !fired.some((f) => f.alert.id === a.id));
-					window.dispatchEvent(new Event("leekbox:alerts-changed"));
 				})
 				.catch(() => {});
 		},
@@ -441,11 +444,11 @@ export function WatchlistTab({ onOpen, bump }) {
 					"div",
 					{ className: "lkb-alertHead" },
 					h("span", { className: "lkb-alertTitle" }, "🔔 价格预警"),
-					h("span", { className: "lkb-code" }, `交易时段自动盯盘 · 触发后弹窗提醒并移除 · ${alerts.length} 条`)
+					h("span", { className: "lkb-code" }, `宿主后台盯盘（面板关了也生效）· 触发进冷却期 · ${alerts.length} 条`)
 				),
 				alertForm === null ? null : h(AlertForm, { code: alertForm.code, name: alertForm.name, onDone: () => setAlertForm(null) }),
 				alerts.length === 0
-					? h("div", { className: "lkb-alertEmpty" }, "暂无预警。点击表格行内 🔔 为自选股设置目标价或涨跌幅提醒。")
+					? h("div", { className: "lkb-alertEmpty" }, "暂无预警。点击表格行内 🔔 设置目标价 / 涨跌幅 / 均线穿越 / 量比提醒。")
 					: h(
 						"div",
 						{ className: "lkb-alertList" },
@@ -456,6 +459,14 @@ export function WatchlistTab({ onOpen, bump }) {
 								h("span", { className: "lkb-name" }, a.name),
 								h("span", { className: "lkb-code" }, a.code),
 								h("span", { className: "lkb-alertCond" }, alertLabel(a)),
+								// 规则常驻：展示冷却状态与历史触发次数，删不删由用户决定。
+								Number(a.firedCount) > 0
+									? h(
+										"span",
+										{ className: "lkb-code", title: `最近触发：${new Date(Number(a.lastFired)).toLocaleTimeString()}` },
+										`已触发 ${a.firedCount} 次`
+									)
+									: null,
 								h("button", { className: "lkb-star", title: "删除该预警", onClick: () => removeAlert(a.id) }, "✕")
 							)
 						)

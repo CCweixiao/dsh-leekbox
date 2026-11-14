@@ -1,10 +1,11 @@
 // 韭菜盒子 LeekBox — 客户端 bundle 源码：AI 个股分析页
 // 由 build.mjs 打包进 lib/client.js（npm run build）；不要手改产物。
 //
-// 模型配置已拆到「全局设置」（面板头部 ⚙️ → settings.js，走 core.js 的全局单例），
-// 本页只负责选股 + 调服务端分析。未配置时把「开始分析」换成「去配置模型」入口。
+// 模型能力复用 DeepSeek Harness（宿主 llm 服务）：本页负责选股 + 选模型 + 调
+// 服务端分析。模型目录来自 core.js 的 Harness 单例（Models 设置页配置的提供方
+// 与模型）；未检测到模型时给出引导，不再有本插件自带的 AI 配置。
 import { h, useCallback, useEffect, useRef, useState } from "./react.js";
-import { API, api, describeError, fmt, fmtPct, lkbConfirm, normCode, trend } from "./core.js";
+import { API, api, describeError, fmt, fmtPct, getAiModel, lkbConfirm, loadHarnessModels, normCode, setAiModel, trend, useHarnessModels } from "./core.js";
 
 /** 搜索去抖：用户停下 350ms 后才发请求，避免每敲一个键都打一次上游。 */
 const SEARCH_DEBOUNCE_MS = 350;
@@ -122,7 +123,7 @@ const KLINE_WINDOWS = [
 /** 追问输入的最大长度（与服务端 FOLLOWUP_QUESTION_MAX 对齐）。 */
 const QUESTION_MAX = 1000;
 
-export function AnalysisTab({ onOpen, configured, onOpenSettings }) {
+export function AnalysisTab({ onOpen }) {
 	const [kw, setKw] = useState("");
 	const [hits, setHits] = useState([]);
 	const [searching, setSearching] = useState(false);
@@ -139,6 +140,35 @@ export function AnalysisTab({ onOpen, configured, onOpenSettings }) {
 	const [copied, setCopied] = useState(false);
 	const [klineWindow, setKlineWindow] = useState(60);
 	const [draft, setDraft] = useState(""); // 追问输入框内容
+
+	// Harness 模型目录（订阅式单例）：挂载时拉一次，模型选择记忆在 localStorage。
+	const catalog = useHarnessModels();
+	const modelOptions = [];
+	for (const p of catalog.providers ?? []) {
+		for (const m of p.models ?? []) {
+			const id = typeof m === "string" ? m : m?.id ?? "";
+			if (id !== "") modelOptions.push({ provider: p.provider, providerName: p.name ?? p.provider, model: id });
+		}
+	}
+	const configured = modelOptions.length > 0;
+	const [aiChoice, setAiChoiceState] = useState(getAiModel());
+	// 生效选择：记住的（provider, model）仍存在于目录就沿用；否则取目录第一个。
+	const effectiveAi =
+		aiChoice !== null && modelOptions.some((x) => x.provider === aiChoice.provider && x.model === aiChoice.model)
+			? aiChoice
+			: modelOptions.length > 0
+				? { provider: modelOptions[0].provider, model: modelOptions[0].model }
+				: null;
+	// run 走 useCallback([])（见 turnsRef 的注释），这里用 ref 让它读到最新选择。
+	const effectiveAiRef = useRef(effectiveAi);
+	effectiveAiRef.current = effectiveAi;
+	const chooseAi = (provider, model) => {
+		setAiModel(provider, model);
+		setAiChoiceState({ provider, model });
+	};
+	useEffect(() => {
+		loadHarnessModels();
+	}, []);
 
 	const searchSeq = useRef(0);
 	const boxRef = useRef(null);
@@ -289,6 +319,12 @@ export function AnalysisTab({ onOpen, configured, onOpenSettings }) {
 					.map((t) => ({ role: t.role, content: t.text }))
 				: [];
 			const payload = { code: target.code, name: target.name, klineWindow };
+			// 带上 Harness 模型选择；服务端在目录缺失时回退第一个可用模型。
+			const ai = effectiveAiRef.current;
+			if (ai !== null) {
+				payload.provider = ai.provider;
+				payload.model = ai.model;
+			}
 			if (isFollowup) {
 				payload.question = question;
 				payload.turns = history;
@@ -600,8 +636,42 @@ export function AnalysisTab({ onOpen, configured, onOpenSettings }) {
 							{ className: "lkb-btn", onClick: analyzing ? stop : run, disabled: false },
 							analyzing ? "停止生成" : turns.length === 0 ? "开始分析" : "重新生成"
 						)
-						: h("button", { className: "lkb-btn", onClick: onOpenSettings }, "去配置模型")
+						: h("button", { className: "lkb-btnGhost", onClick: () => loadHarnessModels() }, "重新检测模型")
 				),
+			// 分析模型：来自 Harness 模型目录（Models 设置页配置的提供方）。
+			// 切换即刻记忆（localStorage），下次生成生效。
+			picked === null
+				? null
+				: configured
+					? h(
+						"div",
+						{ className: "lkb-anWindowRow" },
+						h("span", { className: "lkb-anLabel" }, "分析模型"),
+						h(
+							"select",
+							{
+								className: "lkb-input",
+								value: effectiveAi === null ? "" : effectiveAi.provider + "|" + effectiveAi.model,
+								onChange: (e) => {
+									const sep = e.target.value.indexOf("|");
+									if (sep > 0) chooseAi(e.target.value.slice(0, sep), e.target.value.slice(sep + 1));
+								},
+							},
+							modelOptions.map((x) =>
+								h(
+									"option",
+									{ key: x.provider + "|" + x.model, value: x.provider + "|" + x.model },
+									(x.providerName !== x.provider ? x.providerName + " · " : "") + x.model
+								)
+							)
+						)
+					)
+					: h(
+						"div",
+						{ className: "lkb-anWindowRow" },
+						h("span", { className: "lkb-anLabel" }, "分析模型"),
+						h("span", { className: "lkb-anWindowHint" }, catalog.reason !== "" ? catalog.reason : "尚未检测到已配置模型：请在 DeepSeek Harness 的 设置 → Models 页添加")
+					),
 			// K 线窗口：影响喂给模型的日线根数（进而影响 MA60/MA120 与区间分位
 			// 能否算出）。放在分析按钮下方，改完下次生成生效。
 			picked === null

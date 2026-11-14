@@ -4,7 +4,7 @@ import "./styles.js";
 import { startSessionClock, startThemeClock } from "./core.js";
 import { mountPanel } from "./panel.js";
 import { mountAlertWatcher } from "./watchlist-tab.js";
-import { mountSidebarEntry } from "./sidebar.js";
+import { getSidebarPlacement, mountSidebarEntry } from "./sidebar.js";
 
 export const inject = [];
 const ENTRY_CSS = {
@@ -35,6 +35,7 @@ export function apply(ctx) {
 				label: () => "韭菜盒子",
 				tooltip: () => "韭菜盒子：A股行情 / 选股 / 自选 / 7×24快讯",
 				onToggle: () => panel.toggle(),
+				placement: getSidebarPlacement,
 				position: "after",
 				familySelectors: ["[data-dsh-taskboard-entry]", "[data-dsh-ssh-entry]", "[data-dsh-skill-explorer-entry]", "[data-dsh-leekbox-entry]"],
 			})

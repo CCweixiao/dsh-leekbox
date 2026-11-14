@@ -1,7 +1,7 @@
 // 韭菜盒子 LeekBox — 客户端 bundle 源码：主面板（标签页 + 弹窗管理 + 拖拽 + 预警 toast）
 // 由 build.mjs 打包进 lib/client.js（npm run build）；不要手改产物。
 import { createRoot, h, useCallback, useEffect, useRef, useState } from "./react.js";
-import { API, api, calendarHint, closeConfirm, ConfirmDialog, confirmListeners, loadAnalysisConfig, marketOpenLabel, normCode, onToast, ToastStack, useAnalysisConfig, useInterval } from "./core.js";
+import { API, api, calendarHint, closeConfirm, ConfirmDialog, confirmListeners, loadHarnessModels, marketOpenLabel, normCode, onToast, ToastStack, useHarnessModels, useInterval } from "./core.js";
 import { IndicesTab } from "./indices-tab.js";
 import { MarketTab } from "./market-tab.js";
 import { WatchlistTab } from "./watchlist-tab.js";
@@ -105,10 +105,10 @@ export function LeekBoxPanel({ onClose }) {
 	const [watchBump, setWatchBump] = useState(0);
 	const [pos, setPos] = useState(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
-	// 全局 AI 模型配置（订阅式单例）：面板挂载时拉一次，设置弹窗/分析页共享。
-	const analysisCfg = useAnalysisConfig();
+	// Harness 模型目录（订阅式单例）：面板挂载时拉一次，分析页共享同一份状态。
+	const harnessModels = useHarnessModels();
 	useEffect(() => {
-		loadAnalysisConfig();
+		loadHarnessModels();
 	}, []);
 	const cardRef = useRef(null);
 	const winsRef = useRef([]);
@@ -288,7 +288,7 @@ export function LeekBoxPanel({ onClose }) {
 					: tab === "screener"
 						? h(ScreenerTab, { onOpen: openStock, watchCodes })
 						: tab === "analysis"
-							? h(AnalysisTab, { onOpen: openStock, configured: analysisCfg.configured, onOpenSettings: () => setSettingsOpen(true) })
+							? h(AnalysisTab, { onOpen: openStock })
 							: h(NewsTab, { onOpen: openStock });
 	return h(
 		"div",
