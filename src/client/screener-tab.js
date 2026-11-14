@@ -133,8 +133,13 @@ export function ScreenerTab({ onOpen, watchCodes }) {
 	const [mode, setMode] = useState("standard"); // standard | multi | event
 	const [node, setNode] = useState("hs_a");
 	const [universe, setUniverse] = useState(800);
-	const [f, setF] = useState({ minPrice: "", maxPrice: "", minTurnover: "", maxTurnover: "", minChange: "", maxChange: "" });
+	// 过滤字段名与服务端参数一一对应（priceMin/priceMax…）——以前发的是
+	// minPrice 等错位键名，价格/换手/涨幅过滤在界面上从未真正生效过（存量
+	// bug，0.28 修复）；并新增市盈率区间与市值下限。
+	const [f, setF] = useState({ priceMin: "", priceMax: "", turnoverMin: "", turnoverMax: "", changeMin: "", changeMax: "", peMin: "", peMax: "", mcapMin: "" });
 	const [excludeST, setExcludeST] = useState(true);
+	const [diversify, setDiversify] = useState(false);
+	const [llmReview, setLlmReview] = useState(false);
 	const [require, setRequire] = useState({});
 	const [strategies, setStrategies] = useState({});
 	const [factorRequire, setFactorRequire] = useState({});
@@ -214,7 +219,10 @@ export function ScreenerTab({ onOpen, watchCodes }) {
 			universe: Number(universe) || 0,
 			excludeST,
 			mode,
+			diversify,
+			diversifyMax: 2,
 		};
+		if (llmReview) params.llmReview = true;
 		if (mode === "multi") {
 			params.strategies = meta.strategies.filter((s) => strategies[s.key]).map((s) => s.key);
 			params.minStrategyHits = Math.max(1, Number(minHits) || 2);
@@ -278,7 +286,7 @@ export function ScreenerTab({ onOpen, watchCodes }) {
 		setMode("standard");
 		setNode("hs_a");
 		setUniverse(800);
-		setF({ minPrice: "", maxPrice: "", minTurnover: "", maxTurnover: "", minChange: "", maxChange: "" });
+		setF({ priceMin: "", priceMax: "", turnoverMin: "", turnoverMax: "", changeMin: "", changeMax: "", peMin: "", peMax: "", mcapMin: "" });
 		setExcludeST(true);
 		setRequire({});
 		setStrategies({});
@@ -413,16 +421,25 @@ export function ScreenerTab({ onOpen, watchCodes }) {
 					"div",
 					{ className: "lkb-condBlock", style: { marginLeft: "auto" } },
 					h("div", { className: "lkb-scFieldLabel" }, "风险过滤"),
-					h("label", { className: "lkb-switch", "data-on": excludeST ? "true" : "false", onClick: () => setExcludeST((v) => !v) }, h("span", { className: "lkb-switchTrack" }), "排除 ST")
+					h("label", { className: "lkb-switch", "data-on": excludeST ? "true" : "false", onClick: () => setExcludeST((v) => !v) }, h("span", { className: "lkb-switchTrack" }), "排除 ST"),
+					h("label", { className: "lkb-switch", "data-on": diversify ? "true" : "false", title: "同行业桶（金融/消费/新能源等）最多保留 2 只，避免名单同质化", onClick: () => setDiversify((v) => !v) }, h("span", { className: "lkb-switchTrack" }), "行业分散"),
+					h("label", { className: "lkb-switch", "data-on": llmReview ? "true" : "false", title: "因子前 5 名交由 Harness 模型重排并附一句话理由（消耗模型调用，失败自动回落因子顺序）", onClick: () => setLlmReview((v) => !v) }, h("span", { className: "lkb-switchTrack" }), "AI 终审")
 				)
 			),
 			h("div", { className: "lkb-scDivider" }),
 			h(
 				"div",
 				{ className: "lkb-scRow" },
-				rangeField("价格 ¥", "minPrice", "maxPrice"),
-				rangeField("换手率 %", "minTurnover", "maxTurnover"),
-				rangeField("今日涨幅 %", "minChange", "maxChange")
+				rangeField("价格 ¥", "priceMin", "priceMax"),
+				rangeField("换手率 %", "turnoverMin", "turnoverMax"),
+				rangeField("今日涨幅 %", "changeMin", "changeMax"),
+				rangeField("市盈率 PE", "peMin", "peMax"),
+				h(
+					"div",
+					{ className: "lkb-condBlock" },
+					h("div", { className: "lkb-scFieldLabel" }, "市值 ≥ 亿"),
+					h("input", { className: "lkb-input", value: f.mcapMin, onChange: set("mcapMin"), placeholder: "如 50" })
+				)
 			),
 			h("div", { className: "lkb-scDivider" }),
 			mode === "multi"
@@ -604,6 +621,7 @@ export function ScreenerTab({ onOpen, watchCodes }) {
 								h("th", null, "换手"),
 								h("th", null, "量比"),
 								h("th", null, mode === "multi" ? "命中的策略" : mode === "factor" ? "命中的因子" : "信号"),
+								rows.some((r) => r.aiNote !== void 0) ? h("th", { title: "AI 终审给出的理由（模型重排）" }, "AI 点评") : null,
 								h("th", null, "")
 							)
 						),
@@ -633,6 +651,9 @@ export function ScreenerTab({ onOpen, watchCodes }) {
 											(mode === "multi" ? r.strategies ?? [] : mode === "factor" ? r.factors ?? [] : r.signals ?? []).length > 3 ? h("span", { className: "lkb-signalMore", key: "__more" }, `+${(mode === "multi" ? r.strategies ?? [] : mode === "factor" ? r.factors ?? [] : r.signals ?? []).length - 3}`) : null
 										)
 									),
+									rows.some((r) => r.aiNote !== void 0)
+										? h("td", { className: "lkb-code", style: { maxWidth: 220 } }, r.aiNote === void 0 ? "—" : h("span", { title: r.aiNote }, r.aiNote))
+										: null,
 									h("td", null, h(StarButton, { code: r.code, name: r.name, on: isWatched(watchSet, r.code), confirmText: `确定将 ${r.name}（${r.code}）移出自选吗？` }))
 								)
 							)

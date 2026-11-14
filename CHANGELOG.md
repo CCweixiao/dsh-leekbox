@@ -3,6 +3,20 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.28.0] - 2026-11-14
+
+### Added
+
+- **选股增强三件套**（对标 daily_stock_analysis 的 screening 设计）：
+  - **估值/市值过滤**：新参数 `peMin/peMax`（市盈率区间，快照 f9 动态 PE；设置任一界限时亏损股/PE 缺失一并淘汰）与 `mcapMin/mcapMax`（总市值边界，单位亿）；结果行回带 `pe/pb/marketCap`；客户端选股页新增市盈率区间与市值下限输入。
+  - **行业分散**：新参数 `diversify`（+`diversifyMax` 1~6，默认 2）——按股票名关键词归行业桶（金融/消费/AI算力/新能源/周期/公用事业/医药），贪心桶上限重排，落选者顺延到队尾不丢弃，避免入选名单同板块扎堆；客户端「行业分散」开关。
+  - **选股 LLM 终审**：新参数 `llmReview`——因子前 5 名带 估值/换手/信号命中 上下文交由 Harness 模型重排并附一句话理由（`aiNote`，结果表新增「AI 点评」列）；解析失败或模型不可用自动回落因子顺序（`llmReview.ok=false` 带原因）。
+- **策略配置外置化**：支持 `<dshHome>/leekbox-strategies.json` 定义用户自定义选股策略（`{key,label,desc,signals[]}`，key 不与内置冲突、signals 必须是已知技术信号、最多 20 条），mtime 缓存热加载，`screener/meta` 自动合并下发（`user: true` 标记），multi 模式可直接选用；signals.js 策略查找统一走 `getStrategyDef`（防重入保护）。
+
+### Fixed
+
+- **选股页价格/换手/涨幅过滤从未生效**：客户端发送的键名（`minPrice/minTurnover/minChange`…）与服务端参数（`priceMin/priceMax/…`）错位——0.28 修正键名映射，这三个过滤第一次真正可用（同时补上市盈率/市值输入）。
+
 ## [0.27.0] - 2026-11-14
 
 ### Added
