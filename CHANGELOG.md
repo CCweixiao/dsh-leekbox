@@ -3,6 +3,16 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.24.0] - 2026-11-14
+
+### Changed
+
+- **详情页「资金流分明细」与「财务摘要 F10」美化**：原来是两张 11px 素表格（F10 一屏 9 列数字），扫读困难。
+  - **财务摘要**：顶部新增「最新一期」四块指标瓦片（营收/归母净利带同比胶囊、EPS、ROE），明细表从 9 列瘦身到 6 列——营收与净利的同比改成数值旁的窄版红绿胶囊，斑马行 + 右对齐 tabular 数字，最新报告期整行加粗并带左缘主色条；
+  - **资金流分明细**：主力净流入一列加**双向量条**（正红右伸/负绿左伸，以 8 日内最大绝对值为满格），放量缩量一眼可辨；标题右侧新增「近 8 日主力合计」；最新交易日整行强调；
+  - 表格通用样式（`lkb-finTable`）：表头小字灰、数值右对齐、hover 高亮、暗色主题适配。
+- `/health` 与 `/metrics` 的 `version` 改为实时读取 package.json——纯客户端改动重装后宿主模块未必重新求值，缓存值会滞后一拍。
+
 ## [0.23.0] - 2026-11-14
 
 ### Added

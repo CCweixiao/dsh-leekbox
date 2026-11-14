@@ -519,6 +519,116 @@ function FflowChart({ rows }) {
 		hover === null || hi < 0 ? h("div", { className: "lkb-ffval" }, "悬停柱子查看当日主力净流入") : h("div", { className: "lkb-ffval" }, `${String(rows[hi].date ?? "").slice(5)} 主力净流入 `, h("b", { className: trend(vals[hi]) }, fmtYi(vals[hi])))
 	);
 }
+
+/** 同比/涨跌小胶囊：复用 lkb-pct 红涨绿跌色板，窄版（塞在数值旁边）。 */
+function Yoy({ v }) {
+	return h("span", { className: `lkb-pct lkb-yoy ${trend(v)}` }, fmtPct(v));
+}
+
+/**
+ * 财务摘要 F10：最新期指标瓦片 + 瘦身明细表。
+ * 以前是一张 9 列 × 8 行的 11px 素表格，一眼扫不出重点；现在最关心的
+ * 「最新一期」用四块瓦片放大呈现（营收/归母净利带同比胶囊），明细表瘦
+ * 身到 6 列、数值右侧对齐、斑马行，最新一期整行加粗强调。
+ */
+function F10Section({ reports }) {
+	const latest = reports[0];
+	const tile = (label, value, yoy) =>
+		h(
+			"div",
+			{ className: "lkb-finTile", key: label },
+			h("div", { className: "lkb-finLabel" }, label),
+			h("div", { className: "lkb-finValue" }, value, yoy === null || yoy === void 0 ? null : h(Yoy, { v: yoy }))
+		);
+	const tiles = h(
+		"div",
+		{ className: "lkb-finTiles" },
+		tile("最新营收", latest.revenue === null || latest.revenue === void 0 ? "—" : `${fmtYi(latest.revenue)}亿`, latest.revenueYoy),
+		tile("归母净利", latest.profit === null || latest.profit === void 0 ? "—" : `${fmtYi(latest.profit)}亿`, latest.profitYoy),
+		tile("每股收益", latest.eps === null || latest.eps === void 0 ? "—" : `${fmt(latest.eps)}元`, null),
+		tile("净资产收益率", latest.roe === null || latest.roe === void 0 ? "—" : `${fmt(latest.roe)}%`, null)
+	);
+	const rows = reports.map(
+		(r) =>
+			h(
+				"tr",
+				{ key: r.period },
+				h("td", null, r.period),
+				h("td", null, fmtYi(r.revenue), h(Yoy, { v: r.revenueYoy })),
+				h("td", null, fmtYi(r.profit), h(Yoy, { v: r.profitYoy })),
+				h("td", null, fmt(r.eps)),
+				h("td", null, fmt(r.roe) === "—" ? "—" : `${fmt(r.roe)}%`),
+				h("td", null, fmt(r.debtRatio) === "—" ? "—" : `${fmt(r.debtRatio)}%`)
+			)
+	);
+	return h(
+		"div",
+		null,
+		tiles,
+		h(
+			"table",
+			{ className: "lkb-finTable lkb-finLatest" },
+			h(
+				"thead",
+				null,
+				h("tr", null, h("th", null, "报告期"), h("th", null, "营收(亿)"), h("th", null, "归母净利(亿)"), h("th", null, "EPS(元)"), h("th", null, "ROE"), h("th", null, "负债率"))
+			),
+			h("tbody", null, rows)
+		)
+	);
+}
+
+/**
+ * 资金流分明细：主力净流入一列加双向量条（正红右伸/负绿左伸，以 8 日内
+ * 最大绝对值为满格），一眼看出哪天放了多少量；表头右侧给出 8 日主力
+ * 合计。其余单/列保持数字但统一右对齐 + 斑马行。
+ */
+function FlowDetailSection({ rows }) {
+	const win = rows.slice(-8);
+	const maxAbs = Math.max(...win.map((r) => Math.abs(Number(r.main) || 0)), 1e-8);
+	const sumMain = win.reduce((acc, r) => acc + (Number(r.main) || 0), 0);
+	const bar = (r) => {
+		const v = Number(r.main);
+		if (!Number.isFinite(v) || v === 0) return null;
+		const w = Math.min(50, (Math.abs(v) / maxAbs) * 50);
+		return h("span", {
+			className: `lkb-flowBar ${v > 0 ? "lkb-up" : "lkb-down"}`,
+			style: v > 0 ? { left: "50%", width: `${w}%` } : { right: "50%", width: `${w}%` },
+		});
+	};
+	const body = win.map(
+		(r) =>
+			h(
+				"tr",
+				{ key: r.date },
+				h("td", null, String(r.date ?? "").slice(5)),
+				h(
+					"td",
+					{ className: "lkb-flowMain" },
+					h("span", { className: "lkb-flowTrack" }, bar(r)),
+					h("b", { className: trend(r.main) }, fmtYi(r.main))
+				),
+				h("td", { className: trend(r.xl) }, fmtYi(r.xl)),
+				h("td", { className: trend(r.big) }, fmtYi(r.big)),
+				h("td", { className: trend(r.middle) }, fmtYi(r.middle)),
+				h("td", { className: trend(r.small) }, fmtYi(r.small))
+			)
+	);
+	return h(
+		"div",
+		null,
+		h(
+			"table",
+			{ className: "lkb-finTable lkb-flowNew" },
+			h(
+				"thead",
+				null,
+				h("tr", null, h("th", null, "日期"), h("th", null, "主力净流入"), h("th", null, "超大单"), h("th", null, "大单"), h("th", null, "中单"), h("th", null, "小单"))
+			),
+			h("tbody", null, body)
+		)
+	);
+}
 export function StockDetailWindow({ code, name, isIndex, x, y, z, onFocus, onClose, onWatched }) {
 	const [q, setQ] = useState(null);
 	const [klines, setKlines] = useState([]);
@@ -741,65 +851,24 @@ export function StockDetailWindow({ code, name, isIndex, x, y, z, onFocus, onClo
 			fflow !== null && fflow.length > 0 ? h(
 				"div",
 				{ className: "lkb-chartBox" },
-				h("div", { className: "lkb-chartTitle" }, "资金流分明细（最近 8 日，单位：亿）"),
 				h(
-					"table",
-					{ style: { fontSize: 11 } },
+					"div",
+					{ className: "lkb-chartTitle" },
+					"资金流分明细 · 最近 8 日（亿）",
 					h(
-						"thead",
-						null,
-						h("tr", null, h("th", null, "日期"), h("th", null, "主力净流入"), h("th", null, "超大单"), h("th", null, "大单"), h("th", null, "中单"), h("th", null, "小单"))
-					),
-					h(
-						"tbody",
-						null,
-						fflow.slice(-8).map(
-							(r) => h(
-								"tr",
-								{ key: r.date },
-								h("td", { className: "lkb-code" }, r.date.slice(5)),
-								h("td", { className: trend(r.main) }, fmtYi(r.main)),
-								h("td", { className: trend(r.xl) }, fmtYi(r.xl)),
-								h("td", { className: trend(r.big) }, fmtYi(r.big)),
-								h("td", { className: trend(r.middle) }, fmtYi(r.middle)),
-								h("td", { className: trend(r.small) }, fmtYi(r.small))
-							)
-						)
+						"span",
+						{ className: "lkb-flowSum" },
+						"近8日主力合计 ",
+						h("b", { className: trend(fflow.slice(-8).reduce((acc, r) => acc + (Number(r.main) || 0), 0)) }, fmtYi(fflow.slice(-8).reduce((acc, r) => acc + (Number(r.main) || 0), 0)), "亿")
 					)
-				)
+				),
+				h(FlowDetailSection, { rows: fflow })
 			) : null,
 			f10 !== null && f10.length > 0 ? h(
 				"div",
 				{ className: "lkb-chartBox" },
 				h("div", { className: "lkb-chartTitle" }, "财务摘要（F10 · 最新报告期在前）"),
-				h(
-					"table",
-					{ style: { fontSize: 11 } },
-					h(
-						"thead",
-						null,
-						h("tr", null, h("th", null, "报告期"), h("th", null, "营收(亿)"), h("th", null, "同比"), h("th", null, "归母净利(亿)"), h("th", null, "同比"), h("th", null, "ROE"), h("th", null, "毛利率"), h("th", null, "负债率"), h("th", null, "EPS(元)"))
-					),
-					h(
-						"tbody",
-						null,
-						f10.map(
-							(r) => h(
-								"tr",
-								{ key: r.period },
-								h("td", { className: "lkb-code" }, r.period),
-								h("td", null, fmtYi(r.revenue)),
-								h("td", { className: trend(r.revenueYoy) }, fmtPct(r.revenueYoy)),
-								h("td", null, fmtYi(r.profit)),
-								h("td", { className: trend(r.profitYoy) }, fmtPct(r.profitYoy)),
-								h("td", null, fmt(r.roe) + "%"),
-								h("td", null, fmt(r.grossMargin) + "%"),
-								h("td", null, fmt(r.debtRatio) + "%"),
-								h("td", null, fmt(r.eps))
-							)
-						)
-					)
-				)
+				h(F10Section, { reports: f10 })
 			) : f10Err === "" ? null : h(
 				"div",
 				{ className: "lkb-chartBox" },

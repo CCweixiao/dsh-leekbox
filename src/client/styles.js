@@ -180,6 +180,39 @@ body[data-ds-dark-theme] .lkb-srBadge.t-lof{background:#6b5fa840;color:#c4b5fd}
 .lkb-qItem .lkb-qValue{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 .lkb-chartBox{background:var(--dsw-alias-bg-base,#fff);border:1px solid var(--dsw-alias-border-l1,#e8e9ed);border-radius:12px;padding:12px 14px;margin-bottom:12px}
 .lkb-chartTitle{font-size:12.5px;font-weight:600;color:var(--dsw-alias-label-secondary,#5f6672);display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+/* ---- F10 财务摘要:最新期瓦片 + 瘦身明细表 ---- */
+.lkb-finTiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-bottom:10px}
+.lkb-finTile{background:var(--dsw-alias-bg-subtle,#f7f8fa);border:1px solid var(--dsw-alias-border-l1,#eef0f3);border-radius:10px;padding:7px 10px}
+body[data-ds-dark-theme] .lkb-finTile{background:#ffffff0a}
+.lkb-finLabel{font-size:10.5px;color:var(--dsw-alias-label-tertiary,#a2a7b3);letter-spacing:.05em;margin-bottom:3px}
+.lkb-finValue{font-size:15px;font-weight:700;color:var(--dsw-alias-label-primary,#1c1e26);font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.lkb-finTable{width:100%;border-collapse:collapse;font-size:11.5px;font-variant-numeric:tabular-nums}
+.lkb-finTable th{font-size:10.5px;font-weight:600;color:var(--dsw-alias-label-tertiary,#a2a7b3);text-align:right;padding:4px 9px;border-bottom:1px solid var(--dsw-alias-border-l1,#e8e9ed);white-space:nowrap}
+.lkb-finTable td{padding:5px 9px;text-align:right;border-bottom:1px solid var(--dsw-alias-border-l1,#f2f3f5);white-space:nowrap;color:var(--dsw-alias-label-primary,#1c1e26)}
+.lkb-finTable tr:last-child td{border-bottom:none}
+.lkb-finTable tbody tr:nth-child(even){background:var(--dsw-alias-bg-subtle,#fafbfc)}
+body[data-ds-dark-theme] .lkb-finTable tbody tr:nth-child(even){background:#ffffff08}
+.lkb-finTable tbody tr:hover{background:var(--dsw-alias-bg-active,#f0f2f5)}
+body[data-ds-dark-theme] .lkb-finTable tbody tr:hover{background:#ffffff10}
+.lkb-finTable td:first-child{text-align:left;font-weight:600}
+/* 最新一期整行强调(F10 首行=最新):左缘主色条 + 数值加粗 */
+.lkb-finLatest tbody tr:first-child td{font-weight:700;border-bottom:1px solid var(--dsw-alias-border-l2,#e0e2e8)}
+.lkb-finLatest tbody tr:first-child td:first-child{box-shadow:inset 2px 0 0 var(--dsw-alias-brand-primary,#4263eb)}
+/* 资金流表行序是旧→新,最新一日强调在末行 */
+.lkb-flowNew tbody tr:last-child td{font-weight:700}
+.lkb-flowNew tbody tr:last-child td:first-child{box-shadow:inset 2px 0 0 var(--dsw-alias-brand-primary,#4263eb)}
+/* 同比小胶囊(窄版 lkb-pct) */
+.lkb-yoy{min-width:0;font-size:10px;padding:1px 5px;margin-left:6px;border-radius:5px;vertical-align:1px}
+/* ---- 资金流分明细:主力净流入双向量条 + 8日合计 ---- */
+.lkb-flowSum{font-size:11px;font-weight:400;color:var(--dsw-alias-label-tertiary,#a2a7b3)}
+.lkb-flowSum b{font-variant-numeric:tabular-nums;margin-left:2px}
+.lkb-flowMain{white-space:nowrap}
+.lkb-flowTrack{display:inline-block;position:relative;width:72px;height:10px;background:var(--dsw-alias-bg-subtle,#f1f2f5);border-radius:3px;margin-right:8px;vertical-align:middle;overflow:hidden}
+body[data-ds-dark-theme] .lkb-flowTrack{background:#ffffff0d}
+.lkb-flowTrack::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--dsw-alias-border-l1,#d8dbe2)}
+.lkb-flowBar{position:absolute;top:1px;bottom:1px;border-radius:2px}
+.lkb-flowBar.lkb-up{background:#e03131}
+.lkb-flowBar.lkb-down{background:#0f9d6e}
 .lkb-periodRow{display:flex;gap:4px}
 .lkb-period{font-size:11px;cursor:pointer;padding:2px 8px;border-radius:6px;color:var(--dsw-alias-label-secondary,#8a8f9c);background:0 0;border:1px solid transparent}
 .lkb-period[data-active="true"]{background:#eef2ff;color:#4353a3;font-weight:600}
