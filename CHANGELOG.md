@@ -3,6 +3,16 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.26.0] - 2026-11-14
+
+### Added
+
+- **AI 决策信号落库 + 自动复盘闭环**（借鉴 daily_stock_analysis 的 decision-signals + outcomes 设计，口径保持在「研究观察信号」）：
+  - 首轮 AI 分析正文末尾要求模型追加一个「研究观察信号」JSON 块：`action`（偏多关注/中性观望/偏空谨慎，研究倾向而非交易指令）、置信度、评分、观察窗口天数、参考区间、观察目标价、失效位、观察条件、一句话依据；服务端 `extractSignal` 剥离该块并归一钳制落库（`~/.dsh/.leekbox-signals.json`，上限 200 条），分析正文与缓存不再包含裸 JSON；
+  - **自动复盘**：`GET /signals` 顺带把「观察窗口已走完」的 active 信号用真实日K对账（目标价/失效位收盘触及优先，否则按窗口收益判命中/未中/中性；偏空信号反向判定；中性信号 |±3%| 内算横盘命中），无需常驻定时器；
+  - **胜率统计**：整体与分动作命中率（hit/(hit+miss)），客户端「📐 决策信号复盘」面板展示最近 8 条信号（进行中显示剩余天数）与统计头，支持 👍 人工反馈与删除；
+  - 分析页信号卡：分析完成后正文下方直接渲染本轮信号（方向色动作、置信度、参考区间/目标/失效位、观察条件清单）。
+
 ## [0.25.0] - 2026-11-14
 
 ### Added

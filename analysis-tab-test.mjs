@@ -255,7 +255,12 @@ function sliceComponent() {
 function sliceFn(name) {
 	const start = src.indexOf(`function ${name}(`);
 	if (start < 0) throw new Error(`未找到函数 ${name}`);
-	let i = src.indexOf("{", start);
+	// 与 sliceComponent 同款：跳过参数表（可能是解构 `{ signal }`），
+	// 从「) 后的第一个 {」进入函数体，否则解构参数会被误当成函数体。
+	let close = src.indexOf(")", start);
+	if (close < 0) throw new Error(`未找到 ${name} 参数表`);
+	let i = src.indexOf("{", close);
+	if (i < 0) throw new Error(`未找到 ${name} 函数体`);
 	let depth = 0;
 	for (; i < src.length; i++) {
 		const ch = src[i];
@@ -290,6 +295,16 @@ function siblingHelpers() {
 		if (end > dl) parts.push(src.slice(dl, end + 2));
 	}
 	parts.push(sliceFn("dataBadges"));
+	// 决策信号:SignalCard/SignalsPanel 及其小助手（0.26.0 起 AnalysisTab
+	// 直接引用它们，切片不带上就会 ReferenceError）。
+	const sigConsts = src.indexOf("const SIGNAL_ACTION_LABELS =");
+	if (sigConsts >= 0) {
+		const end = src.indexOf("};", sigConsts);
+		if (end > sigConsts) parts.push(src.slice(sigConsts, end + 2));
+	}
+	for (const fn of ["signalActionCls", "fmtLevel", "SignalCard", "remainDays", "outcomeBadge", "SignalsPanel"]) {
+		parts.push(sliceFn(fn));
+	}
 	return parts.join("\n");
 }
 

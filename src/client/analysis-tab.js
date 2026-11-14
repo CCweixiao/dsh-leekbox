@@ -140,6 +140,10 @@ export function AnalysisTab({ onOpen }) {
 	const [copied, setCopied] = useState(false);
 	const [klineWindow, setKlineWindow] = useState(60);
 	const [draft, setDraft] = useState(""); // 追问输入框内容
+	// 决策信号：本轮分析产出的观察信号卡 + 历史信号列表/胜率统计。
+	const [lastSignal, setLastSignal] = useState(null);
+	const [signals, setSignals] = useState([]);
+	const [sigStats, setSigStats] = useState(null);
 
 	// Harness 模型目录（订阅式单例）：挂载时拉一次，模型选择记忆在 localStorage。
 	const catalog = useHarnessModels();
@@ -169,6 +173,28 @@ export function AnalysisTab({ onOpen }) {
 	useEffect(() => {
 		loadHarnessModels();
 	}, []);
+	// 决策信号：挂载拉一次列表+胜率；分析产出新信号后由 done 处理器再拉。
+	const loadSignals = useCallback(() => {
+		api(API.signals)
+			.then((d) => {
+				setSignals(Array.isArray(d.signals) ? d.signals : []);
+				setSigStats(d.stats ?? null);
+			})
+			.catch(() => {});
+	}, []);
+	useEffect(() => {
+		loadSignals();
+	}, [loadSignals]);
+	const feedbackSig = (id, useful) => {
+		api(API.signals + "/feedback", { method: "POST", body: { id, useful } })
+			.then(loadSignals)
+			.catch(() => {});
+	};
+	const removeSig = (id) => {
+		api(API.signals + "/remove", { method: "POST", body: { id } })
+			.then(loadSignals)
+			.catch(() => {});
+	};
 
 	const searchSeq = useRef(0);
 	const boxRef = useRef(null);
@@ -297,6 +323,8 @@ export function AnalysisTab({ onOpen }) {
 		let acc = "";
 		let meta = null;
 		let sawDelta = false;
+		// 服务端 done 带回的观察信号：正文里的 JSON 块要剥离后再展示/落缓存。
+		let doneSignal = null;
 		// 追加到最后一条 assistant 上。用函数式更新拿 prev，避免闭包读到旧数组。
 		const appendDelta = (text) => {
 			setTurns((prev) => {
@@ -401,11 +429,35 @@ export function AnalysisTab({ onOpen }) {
 							acc += text;
 							appendDelta(text);
 						} else if (eventName === "error") throw new Error(typeof json.error === "string" ? json.error : "分析失败，请稍后重试");
-						// done 事件无需处理
+						// done 事件带回首轮产出的「研究观察信号」（追问轮为 null）。
+						else if (eventName === "done") {
+							if (json !== null && json.signal !== null && json.signal !== void 0 && !stale()) doneSignal = json.signal;
+						}
 					}
 				}
 			}
 			// 成功收尾：落缓存（只在确实拿到正文时写，避免把空结果缓存住）。
+			if (doneSignal !== null && !stale()) {
+				// 正文里流式输出过的「研究观察信号」JSON 块在这里剥离——展示与
+				// 缓存都只保留分析正文；信号本体已由服务端落库并以卡片呈现。
+				const idx = acc.lastIndexOf("```json");
+				if (idx >= 0) {
+					const end = acc.indexOf("```", idx + 7);
+					if (end >= 0) acc = (acc.slice(0, idx) + acc.slice(end + 3)).trimEnd();
+				}
+				setTurns((prev) => {
+					const cp = prev.slice();
+					for (let i = cp.length - 1; i >= 0; i--) {
+						if (cp[i].role === "assistant") {
+							cp[i] = { ...cp[i], text: acc };
+							break;
+						}
+					}
+					return cp;
+				});
+				setLastSignal(doneSignal);
+				loadSignals();
+			}
 			if (acc !== "" && !stale()) {
 				const at = Date.now();
 				// 缓存里存**完整对话**：追问属于这次分析上下文的一部分，
@@ -725,6 +777,9 @@ export function AnalysisTab({ onOpen }) {
 								: h("div", { key: i, className: "lkb-anReply" }, t.text)
 						)
 					),
+					// 本轮分析产出的「研究观察信号」卡（服务端从正文末尾提取落库，
+					// 正文里的 JSON 块已在收尾时剥离）。
+					lastSignal !== null ? h(SignalCard, { signal: lastSignal }) : null,
 					h(
 						"div",
 						{ className: "lkb-anResultBar" },
@@ -779,7 +834,114 @@ export function AnalysisTab({ onOpen }) {
 						analyzing ? "停止" : "追问"
 					)
 				)
-		)
+		),
+		h(SignalsPanel, { signals, stats: sigStats, onFeedback: feedbackSig, onDelete: removeSig, onRefresh: loadSignals })
+	);
+}
+
+/** 信号方向 → 红涨绿跌类名（偏多红 / 偏空绿 / 中性灰）。 */
+function signalActionCls(action) {
+	return action === "bullish" ? "lkb-up" : action === "bearish" ? "lkb-down" : "";
+}
+
+const SIGNAL_ACTION_LABELS = { bullish: "偏多关注", neutral: "中性观望", bearish: "偏空谨慎" };
+function fmtLevel(v) {
+	return Number.isFinite(v) ? fmt(v) : "—";
+}
+
+/** 本轮分析产出的「研究观察信号」卡。 */
+function SignalCard({ signal }) {
+	const levels = [
+		["参考区间", `${fmtLevel(signal.referenceLow)} ~ ${fmtLevel(signal.referenceHigh)}`],
+		["观察目标", fmtLevel(signal.targetPrice)],
+		["失效位", fmtLevel(signal.invalidation)],
+		["观察窗口", `${signal.horizonDays} 个交易日`],
+	];
+	return h(
+		"div",
+		{ className: "lkb-sigCard" },
+		h(
+			"div",
+			{ className: "lkb-sigHead" },
+			h("span", { className: `lkb-sigAction ${signalActionCls(signal.action)}` }, SIGNAL_ACTION_LABELS[signal.action] ?? String(signal.action)),
+			signal.confidence !== null && signal.confidence !== void 0 ? h("span", { className: "lkb-sigConf" }, `置信度 ${(signal.confidence * 100).toFixed(0)}%`) : null,
+			signal.score !== null && signal.score !== void 0 ? h("span", { className: "lkb-code" }, `评分 ${signal.score}`) : null,
+			h("span", { style: { flex: 1 } }),
+			h("span", { className: "lkb-code" }, "研究观察参考 · 非交易指令")
+		),
+		signal.reason === "" ? null : h("div", { className: "lkb-sigReason" }, signal.reason),
+		h(
+			"div",
+			{ className: "lkb-sigLevels" },
+			levels.map(([k, v]) => h("span", { key: k, className: "lkb-sigLevel" }, h("span", { className: "lkb-code" }, k), h("b", null, v)))
+		),
+		Array.isArray(signal.watchConditions) && signal.watchConditions.length > 0
+			? h("ul", { className: "lkb-sigCond" }, signal.watchConditions.map((c, i) => h("li", { key: i }, c)))
+			: null
+	);
+}
+
+function remainDays(sig) {
+	const due = new Date(sig.createdAt).getTime() + (Number(sig.horizonDays) || 5) * 86400000;
+	return Math.max(0, Math.ceil((due - Date.now()) / 86400000));
+}
+
+function outcomeBadge(sig) {
+	if (sig.status !== "reviewed" || sig.outcome === null || sig.outcome === void 0) {
+		return h("span", { className: "lkb-sigBadge" }, `观察中 · 剩 ${remainDays(sig)} 天`);
+	}
+	const r = sig.outcome;
+	const cls = r.result === "hit" ? "lkb-sigHit" : r.result === "miss" ? "lkb-sigMiss" : "lkb-sigNeutral";
+	const label = r.result === "hit" ? "命中" : r.result === "miss" ? "未中" : "中性";
+	const pct = `${r.returnPct >= 0 ? "+" : ""}${r.returnPct}%`;
+	return h("span", { className: `lkb-sigBadge ${cls}`, title: `${r.note}（${r.windowStart} ~ ${r.windowEnd}）` }, `${label} ${pct}`);
+}
+
+/** 历史信号复盘面板：最近 8 条 + 整体胜率，支持 👍 反馈与删除。 */
+function SignalsPanel({ signals, stats, onFeedback, onDelete, onRefresh }) {
+	const list = Array.isArray(signals) ? signals.slice(0, 8) : [];
+	return h(
+		"div",
+		{ className: "lkb-anCard", style: { marginTop: 10 } },
+		h(
+			"div",
+			{ className: "lkb-anTitle" },
+			"📐 决策信号复盘",
+			h("span", { style: { flex: 1 } }),
+			stats !== null && stats !== void 0
+				? h(
+					"span",
+					{ className: "lkb-code" },
+					`共 ${stats.total} 条 · 已复盘 ${stats.reviewed} · 命中 ${stats.hit} · 胜率 ${stats.hitRatePct === null ? "—" : stats.hitRatePct + "%"}`,
+					h("button", { className: "lkb-btnGhost", style: { marginLeft: 8 }, onClick: onRefresh, title: "重新对账到期信号" }, "↻")
+				)
+				: null
+		),
+		list.length === 0
+			? h("div", { className: "lkb-empty" }, "暂无信号。生成一次「个股分析」，AI 会在正文末尾给出研究观察信号，到期自动用真实行情复盘。")
+			: h(
+				"div",
+				{ className: "lkb-sigList" },
+				list.map((s) =>
+					h(
+						"div",
+						{ key: s.id, className: "lkb-sigRow" },
+						h("span", { className: "lkb-code" }, String(s.createdAt ?? "").slice(5, 10)),
+						h("span", { className: "lkb-name" }, s.name),
+						h("span", { className: "lkb-code" }, s.code),
+						h("span", { className: `lkb-sigAction ${signalActionCls(s.action)}` }, SIGNAL_ACTION_LABELS[s.action] ?? String(s.action)),
+						h("span", { className: "lkb-code" }, `@${s.priceAtSignal ?? "—"}`),
+						outcomeBadge(s),
+						h("span", { style: { flex: 1 } }),
+						h("button", {
+							className: "lkb-star",
+							title: s.feedback !== null && s.feedback !== void 0 ? (s.feedback.useful ? "已标：有用" : "已标：没用") : "这条信号有用吗？",
+							onClick: () => onFeedback(s.id, !(s.feedback !== null && s.feedback !== void 0 && s.feedback.useful === true)),
+						}, s.feedback !== null && s.feedback !== void 0 ? (s.feedback.useful ? "👍" : "👎") : "👍"),
+						h("button", { className: "lkb-star", title: "删除该信号", onClick: () => onDelete(s.id) }, "✕")
+					)
+				)
+			)
 	);
 }
 

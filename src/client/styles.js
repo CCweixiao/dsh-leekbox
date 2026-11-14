@@ -320,6 +320,29 @@ body[data-ds-dark-theme] .lkb-liveChip{background:#ffffff0d}
 .lkb-refreshBtn{border:1px solid var(--dsw-alias-border-l1,#e0e2e8);background:var(--dsw-alias-bg-overlay,#fff);color:var(--dsw-alias-label-secondary,#5f6672);border-radius:8px;padding:2px 8px;font-size:11px;line-height:1.4;cursor:pointer;white-space:nowrap}
 .lkb-refreshBtn:hover{color:var(--dsw-alias-label-primary,#1c1e26);border-color:var(--dsw-alias-border-l2,#c9ccd6)}
 .lkb-refreshBtn:active{transform:translateY(1px)}
+/* ---- 决策信号:观察信号卡 + 复盘面板 ---- */
+.lkb-sigCard{margin-top:10px;border:1px solid var(--dsw-alias-border-l1,#e8e9ed);border-radius:10px;padding:9px 11px;background:var(--dsw-alias-bg-subtle,#f7f8fa)}
+body[data-ds-dark-theme] .lkb-sigCard{background:#ffffff0a}
+.lkb-sigHead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lkb-sigAction{font-weight:700;font-size:12px}
+.lkb-sigAction.lkb-up{color:#e03131}
+.lkb-sigAction.lkb-down{color:#0f9d6e}
+.lkb-sigConf{font-size:11px;color:var(--dsw-alias-label-secondary,#5f6672)}
+.lkb-sigReason{font-size:11.5px;line-height:1.5;color:var(--dsw-alias-label-secondary,#5f6672);margin-top:5px}
+.lkb-sigLevels{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:5px 14px;margin-top:7px;font-size:11.5px}
+.lkb-sigLevel{display:flex;align-items:baseline;gap:6px}
+.lkb-sigLevel b{font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-primary,#1c1e26)}
+.lkb-sigCond{margin:7px 0 0;padding-left:18px;font-size:11px;line-height:1.6;color:var(--dsw-alias-label-secondary,#5f6672)}
+.lkb-sigList{display:flex;flex-direction:column}
+.lkb-sigRow{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--dsw-alias-border-l1,#f2f3f5);font-size:11.5px;flex-wrap:wrap}
+.lkb-sigRow:last-child{border-bottom:none}
+.lkb-sigRow .lkb-name{flex:0 0 auto}
+.lkb-sigBadge{font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:999px;background:var(--dsw-alias-bg-subtle,#f1f2f5);color:var(--dsw-alias-label-secondary,#5f6672);font-variant-numeric:tabular-nums}
+body[data-ds-dark-theme] .lkb-sigBadge{background:#ffffff12}
+.lkb-sigBadge.lkb-sigHit{background:#4263eb14;color:#4263eb}
+body[data-ds-dark-theme] .lkb-sigBadge.lkb-sigHit{color:#91a7ff}
+.lkb-sigBadge.lkb-sigMiss{color:var(--dsw-alias-label-tertiary,#a2a7b3)}
+.lkb-sigBadge.lkb-sigNeutral{color:#f08c00}
 .lkb-kaxis{position:relative;height:16px;margin-top:3px;font-size:10.5px;color:var(--dsw-alias-label-tertiary,#a2a7b3);font-variant-numeric:tabular-nums}
 .lkb-kaxis span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}
 /* ---- 当日分时图(价格线+均价线+成交量,左右纵轴标签) ---- */
