@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.21.1] - 2026-11-14
+
+### Fixed
+
+- **标签栏「自选」图标缺失**：`TAB_ICONS` 的键误写成 `star`（与 TABS 的 `watchlist` 不对应），五角星从未被渲染。修正键名并新增静态检查——每个标签页的 key 必须有同名图标定义，防止再次悄悄缺图标。
+- **财务摘要（F10）取不到时不再一错到底**：主网关（datacenter 双域）从 2 入口扩到 4 入口（https + http 混排，部分网络对东财 TLS 整段重置时 http 只读 GET 仍可达）；datacenter 全挂时**降级到 HSF10 Web 网关**（emweb.securities.eastmoney.com，不同域，字段词汇与 datacenter 一致、共用同一行解析器）；两个网关都不可达时，错误 detail 保留两条链路的最后错误便于排障。AI 分析的数据包（F10 摘要）同样受益。
+
 ## [0.21.0] - 2026-11-14
 
 ### Added

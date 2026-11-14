@@ -184,5 +184,20 @@ check("inject 为空（样式走 styles.js 自注入）", exp.inject.length === 
 	);
 }
 
+// 5) 标签栏图标完备性（源码静态检查）：TABS 的每个 key 必须在 TAB_ICONS 里
+//    有同名条目——曾经自选页的图标键误写成 star，标签栏悄悄缺了一枚图标。
+{
+	const panelSrc = readFileSync(new URL("./src/client/panel.js", import.meta.url), "utf8");
+	const tabKeys = [...panelSrc.matchAll(/\{\s*key:\s*"([\w]+)",\s*label:/g)].map((m) => m[1]);
+	const iconBlock = panelSrc.slice(panelSrc.indexOf("const TAB_ICONS"), panelSrc.indexOf("/** 把 TAB_ICONS 的路径描述渲染成"));
+	const iconKeys = [...iconBlock.matchAll(/^\t([\w]+):/gm)].map((m) => m[1]);
+	const missingIcons = tabKeys.filter((k) => !iconKeys.includes(k));
+	check(
+		`${tabKeys.length} 个标签页的图标都有定义`,
+		tabKeys.length > 0 && missingIcons.length === 0,
+		missingIcons.length === 0 ? `（${tabKeys.join(" / ")}）` : `缺图标：${missingIcons.join(" / ")}`
+	);
+}
+
 console.log(fail === 0 ? "\n✅ bundle 契约完好" : `\n❌ ${fail} 项失败`);
 process.exit(fail === 0 ? 0 : 1);

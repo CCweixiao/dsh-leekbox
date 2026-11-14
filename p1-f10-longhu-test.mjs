@@ -13,6 +13,9 @@ import { resetRouteCachesForTests } from "./lib/route-cache.js";
 
 let f10Calls = 0;
 let f10Url = "";
+// F10 降级开关：置 true 时 datacenter 主网关全部抛错，逼 fetchEmF10Main
+// 走 HSF10 Web 网关（emweb.securities.eastmoney.com，不同域的降级链路）。
+let f10FailDatacenter = false;
 // 龙虎榜桩：只对 longhuDates 里的日期返回数据，其余返回空 —— 这样才能真正
 // 驱动"按请求日期回溯"的逻辑（旧实现忽略 date 参数，永远从今天倒推）。
 let longhuDates = new Set();
@@ -20,6 +23,28 @@ const longhuUrls = [];
 globalThis.fetch = async (url) => {
 	const u = String(url);
 	const jsonHeaders = { status: 200, headers: { "content-type": "application/json" } };
+	if (u.includes("/securities/api/data/v1/get") && f10FailDatacenter) {
+		throw new Error("simulated datacenter outage");
+	}
+	if (u.includes("ZYZBAjaxNew")) {
+		// HSF10 Web 网关（与 datacenter 字段词汇一致的降级源）
+		return new Response(
+			JSON.stringify({
+				pages: 1,
+				data: [
+					{
+						SECUCODE: "600519.SH", SECURITY_CODE: "600519", SECURITY_NAME_ABBR: "贵州茅台",
+						REPORT_DATE_NAME: "2026三季报", REPORT_TYPE: "三季报", NOTICE_DATE: "2026-10-31 00:00:00",
+						EPSJB: 51.53, TOTALOPERATEREVE: 133283652508.95, TOTALOPERATEREVETZ: 1.82,
+						PARENTNETPROFIT: 64467425981.95, PARENTNETPROFITTZ: -0.25,
+						KCFJCXSYJLR: 64324824599.18, KCFJCXSYJLRTZ: -0.55,
+						ROEJQ: 24.47, XSMLL: 89.58, XSJLL: 50.94, ZCFZL: 11.9,
+					},
+				],
+			}),
+			jsonHeaders
+		);
+	}
 	if (u.includes("RPT_F10_FINANCE_MAINFINADATA")) {
 		f10Calls += 1;
 		f10Url = u;
@@ -236,6 +261,22 @@ res = makeRes();
 await longhuRoute.handler(makeGet(`${ROUTES.longhu}?date=2026-10-09`), res);
 assert.strictEqual(res.statusCode, 502, "回溯窗口内无数据必须报错");
 assert.match(json(res).error, /[\u4e00-\u9fa5]/, "错误文案必须是中文");
+
+console.log("== 4) F10 降级：datacenter 全挂时走 HSF10 网关 ==");
+// datacenter 双域 https/http 全部抛错（模拟 TLS 整段被重置的网络），断言
+// fetchEmF10Main 仍能从 emweb HSF10 网关取回同一份字段契约的数据。
+f10FailDatacenter = true;
+const fallbackReports = await fetchEmF10Main("sh600519");
+assert.strictEqual(fallbackReports.length, 1, "HSF10 降级源返回 1 行");
+const fr = fallbackReports[0];
+assert.strictEqual(fr.period, "2026三季报");
+assert.strictEqual(fr.eps, 51.53);
+assert.strictEqual(fr.revenue, 133283652508.95);
+assert.strictEqual(fr.profitYoy, -0.25);
+assert.strictEqual(fr.debtRatio, 11.9);
+// 代码校验仍先行：坏代码不该触发任何上游
+await assert.rejects(fetchEmF10Main("garbage"), /代码无法识别/);
+f10FailDatacenter = false;
 
 console.log("\n✅ P1 TEST PASSED: F10 + longhu parsers stay aligned with the live datacenter shapes");
 process.exit(0);
