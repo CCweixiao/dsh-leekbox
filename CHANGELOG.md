@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.28.2] - 2026-11-14
+
+### Fixed
+
+- **行情页「板块榜看起来没样式」**：根因不是样式缺失——是东财 clist 板块网关（m:90+t:2）当前故障（返回 `data:null`/连接重置），插件按设计降级到新浪备用源，而新浪源没有「主力净流入/上涨/下跌家数」字段，表格 5 列里 2 列全为 "—"，视觉上像页面坏了。修复：EM 与新浪两条来源都带 `source` 标记并透传到前端，板块榜顶部在新浪兜底时显示降级横幅（「东财板块源暂不可用……」），用户能明确区分「数据源降级」与「页面故障」；东财源恢复后横幅自动消失。
+
 ## [0.28.1] - 2026-11-14
 
 ### Fixed

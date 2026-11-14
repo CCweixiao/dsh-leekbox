@@ -143,6 +143,7 @@ export function MarketTab({ onOpen, watchCodes }) {
 	const [sectorPageSize, setSectorPageSize] = useState(30);
 	const [sectorRows, setSectorRows] = useState([]);
 	const [sectorTotal, setSectorTotal] = useState(0);
+	const [sectorSource, setSectorSource] = useState("em");
 	const [sectorLoading, setSectorLoading] = useState(false);
 	const [lhRows, setLhRows] = useState([]);
 	const [lhTotal, setLhTotal] = useState(0);
@@ -223,6 +224,9 @@ export function MarketTab({ onOpen, watchCodes }) {
 				if (seq !== sectorSeq.current) return; // stale response
 				setSectorRows(data.rows ?? []);
 				setSectorTotal(data.total ?? 0);
+				// 来源标记：新浪兜底没有主力净流入/涨跌家数，横幅说明是降级而非
+				// 样式丢失（否则整表一排 "—" 像是页面坏了）。
+				setSectorSource(data.source ?? "em");
 			})
 			.catch((e) => {
 				if (seq !== sectorSeq.current) return;
@@ -415,6 +419,9 @@ export function MarketTab({ onOpen, watchCodes }) {
 						h("button", { className: "lkb-chip", "data-active": sectorSort === "f62" ? "true" : "false", onClick: () => { setSectorSort("f62"); setSectorPage(1); } }, "主力净流入")
 					)
 				: null,
+		mode === "sector" && sectorSource === "sina"
+			? h("div", { className: "lkb-banner" }, "📡 东财板块源暂不可用，已切换新浪备用源——主力净流入与涨跌家数暂缺，其余列正常")
+			: null,
 		mode === "longhu"
 			? h(
 					"div",
