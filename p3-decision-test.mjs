@@ -12,7 +12,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { extractSignal, normalizeSignal, reviewSignal, signalStats } from "./lib/decision.js";
-import { makeRoutes, ROUTES } from "./lib/index.js";
+import { makeRoutes, ROUTES, harnessStreamText } from "./lib/index.js";
 import { resetRouteCachesForTests } from "./lib/route-cache.js";
 
 // ---- 1) extractSignal ----
@@ -230,5 +230,42 @@ await signalsRoute.handler(makeGet(ROUTES.signals), res);
 assert.deepEqual(json(res).stats.total, 0);
 
 rmSync(home, { recursive: true, force: true });
-console.log("\n✅ P3 DECISION TEST PASSED: signal extraction/review/stats/routes work");
+
+console.log("== 6) harnessStreamText 截断检测（AI 分析静默停止的根修） ==");
+// 桩 llm：可编程的 chunk 序列（stream 挂在 prepareCall 返回的 call 对象上）
+function stubLlm(chunks) {
+	return {
+		prepareCall: async () => ({
+			provider: "p",
+			model: "m",
+			config: {},
+			stream: async function* () { for (const c of chunks) yield c; },
+		}),
+	};
+}
+// 6a. 静默截断：只有 text-delta、没有 finish → failure=stream_truncated
+{
+	const { text, failure } = await harnessStreamText(stubLlm([{ type: "text-delta", text: "分析正文" }]), { provider: "p", model: "m" }, "提问");
+	assert.equal(text, "分析正文");
+	assert.equal(failure?.code, "stream_truncated", `静默截断必须报 stream_truncated, got ${failure?.code}`);
+}
+// 6b. finish=length → failure=length_truncated（正文保留）
+{
+	const { text, failure } = await harnessStreamText(stubLlm([{ type: "text-delta", text: "半截" }, { type: "finish", reason: { kind: "length" } }]), { provider: "p", model: "m" }, "提问");
+	assert.equal(text, "半截");
+	assert.equal(failure?.code, "length_truncated");
+}
+// 6c. 正常 finish（kind=stop，无 failure）→ failure=null
+{
+	const { text, failure } = await harnessStreamText(stubLlm([{ type: "text-delta", text: "全文" }, { type: "finish", reason: { kind: "stop" } }]), { provider: "p", model: "m" }, "提问");
+	assert.equal(text, "全文");
+	assert.equal(failure, null, "正常结束不算失败");
+}
+// 6d. 上游 error 分片 → failure 透传
+{
+	const { failure } = await harnessStreamText(stubLlm([{ type: "text-delta", text: "x" }, { type: "error", failure: { code: "RATE_LIMIT", message: "限流" } }]), { provider: "p", model: "m" }, "提问");
+	assert.equal(failure?.code, "RATE_LIMIT");
+}
+
+console.log("\n✅ P3 DECISION TEST PASSED: signal extraction/review/stats/routes/truncation work");
 process.exit(0);

@@ -3,6 +3,15 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.28.1] - 2026-11-14
+
+### Fixed
+
+- **AI 分析「只输出一点就停止」的静默截断根修**：模型流中断（上游断流/连接中断/max_tokens 截断）时，`harnessStreamText` 曾把「没有收到正常结束信号」的输出**当成成功静默返回**——残缺正文直接展示、无任何提示、决策信号也不会落库。修复：
+  - 服务端补三类失败检测：流结束但无 finish 分片 → `stream_truncated`；finish `kind=length`（token 上限截断）→ `length_truncated`；两者都会以明确中文提示出现在分析页错误条（已生成的部分保留可见），并附带「重新生成」引导；
+  - 提示词硬化：信号块必须放在完整分析（全部小节 + 免责声明）之后，不得为输出信号而省略/压缩/提前结束正文；
+  - 客户端：流静默中断（没收到 done/error 就结束）不再当成功收尾——保留已生成部分、显示「模型输出中断…可点重新生成」提示，中断的残文**不落缓存**（避免重开面板把半截内容当完整分析回放）。
+
 ## [0.28.0] - 2026-11-14
 
 ### Added

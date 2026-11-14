@@ -354,6 +354,7 @@ export function AnalysisTab({ onOpen }) {
 		let sawDelta = false;
 		// 服务端 done 带回的观察信号：正文里的 JSON 块要剥离后再展示/落缓存。
 		let doneSignal = null;
+		let doneReceived = false;
 		// 追加到最后一条 assistant 上。用函数式更新拿 prev，避免闭包读到旧数组。
 		const appendDelta = (text) => {
 			setTurns((prev) => {
@@ -462,12 +463,22 @@ export function AnalysisTab({ onOpen }) {
 						} else if (eventName === "error") throw new Error(typeof json.error === "string" ? json.error : "分析失败，请稍后重试");
 						// done 事件带回首轮产出的「研究观察信号」（追问轮为 null）。
 						else if (eventName === "done") {
+							doneReceived = true;
 							if (json !== null && json.signal !== null && json.signal !== void 0 && !stale()) doneSignal = json.signal;
 						}
 					}
 				}
 			}
-			// 成功收尾：落缓存（只在确实拿到正文时写，避免把空结果缓存住）。
+			// 连接/流静默中断（没收到 done 也没收到 error）：已生成的部分保留，
+		// 但必须告诉用户"内容不完整"——以前这里被当成成功静默收尾。
+		if (!doneReceived && !stale()) {
+			setError((prev) => (prev === "" ? "模型输出中断，本次内容可能不完整——已生成的部分已保留，可点「重新生成」重试" : prev));
+			if (acc !== "" && isFollowup && turns.length > 0 && turns[turns.length - 1].role === "assistant" && turns[turns.length - 1].text === "") {
+				// 追问轮的空气泡收掉，避免留一个空气泡（与错误路径同语义）。
+				setTurns((prev) => (prev.length > 0 && prev[prev.length - 1].role === "assistant" && prev[prev.length - 1].text === "" ? prev.slice(0, -1) : prev));
+			}
+		}
+		// 成功收尾：落缓存（只在确实拿到正文时写，避免把空结果缓存住）。
 			if (doneSignal !== null && !stale()) {
 				// 正文里流式输出过的「研究观察信号」JSON 块在这里剥离——展示与
 				// 缓存都只保留分析正文；信号本体已由服务端落库并以卡片呈现。
@@ -489,7 +500,8 @@ export function AnalysisTab({ onOpen }) {
 				setLastSignal(doneSignal);
 				loadSignals();
 			}
-			if (acc !== "" && !stale()) {
+			// 中断的残文不落缓存：重新打开面板不应把半截内容当成完整分析回放。
+			if (acc !== "" && !stale() && doneReceived) {
 				const at = Date.now();
 				// 缓存里存**完整对话**：追问属于这次分析上下文的一部分，
 				// 只存首轮会让用户回来看到半截会话。同样读 ref 取最新值。
