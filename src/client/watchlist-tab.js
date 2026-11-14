@@ -81,6 +81,29 @@ const ALERT_KIND_LABELS = {
 /** 均线周期的四档选项(与服务端 MA_SPANS 一致)。 */
 const ALERT_MA_SPANS = [5, 10, 20, 60];
 
+/** 近 22 日微型走势线(借鉴寰镜自选行):面积渐变 + 端点圆点,红涨绿跌。 */
+function Sparkline({ closes, kind }) {
+	const w = 64;
+	const ht = 20;
+	const pad = 2;
+	const min = Math.min(...closes);
+	const max = Math.max(...closes);
+	const span = max - min || max || 1;
+	const step = (w - pad * 2) / Math.max(closes.length - 1, 1);
+	const xy = (v, i) => [pad + i * step, pad + (1 - (v - min) / span) * (ht - pad * 2)];
+	const pts = closes.map((v, i) => xy(v, i).map((n) => n.toFixed(1)).join(","));
+	const color = kind === "down" ? "#0f9d6e" : "#e03131";
+	const [endX, endY] = xy(closes[closes.length - 1], closes.length - 1).map((n) => n.toFixed(1));
+	const area = `M${pts[0]} L${pts.join(" L")} L${endX},${ht - pad} L${pts[0].split(",")[0]},${ht - pad} Z`;
+	return h(
+		"svg",
+		{ className: "lkb-spark", viewBox: `0 0 ${w} ${ht}`, width: w, height: ht, "aria-hidden": "true" },
+		h("path", { d: area, fill: color, opacity: 0.12 }),
+		h("polyline", { points: pts.join(" "), fill: "none", stroke: color, strokeWidth: 1.4, strokeLinejoin: "round", strokeLinecap: "round" }),
+		h("circle", { cx: endX, cy: endY, r: 1.8, fill: color })
+	);
+}
+
 function alertLabel(a) {
 	if (a.kind === "above") return `价格涨到 ${fmt(a.price)}`;
 	if (a.kind === "below") return `价格跌破 ${fmt(a.price)}`;
@@ -344,6 +367,23 @@ export function WatchlistTab({ onOpen, bump }) {
 		window.addEventListener("leekbox:alerts-changed", loadAlerts);
 		return () => window.removeEventListener("leekbox:alerts-changed", loadAlerts);
 	}, [loadAlerts]);
+	// 自选行走势:近 22 日收盘 + 一句话趋势。变化很慢,5 分钟一轮足够——
+	// 服务端还有同 TTL 的单飞缓存兜着,重复请求只会命中缓存不打车。
+	const [trends, setTrends] = useState({});
+	const codesKey = items.map((e) => e.code).join(",");
+	const loadTrends = useCallback(() => {
+		const codes = codesKey === "" ? [] : codesKey.split(",").slice(0, 60);
+		if (codes.length === 0) return;
+		const chunks = [];
+		for (let i = 0; i < codes.length; i += 50) chunks.push(codes.slice(i, i + 50).join(","));
+		Promise.all(chunks.map((c) => api(API.trend + `?codes=${c}`)))
+			.then((parts) => setTrends(Object.assign({}, ...parts.map((p) => p.trends ?? []))))
+			.catch(() => {});
+	}, [codesKey]);
+	useEffect(() => {
+		loadTrends();
+	}, [loadTrends]);
+	useTradingInterval(loadTrends, 300000);
 	const removeAlert = (id) => {
 		api(API.alerts + "/remove", { method: "POST", body: { id } })
 			.then(() => window.dispatchEvent(new Event("leekbox:alerts-changed")))
@@ -527,6 +567,7 @@ export function WatchlistTab({ onOpen, bump }) {
 					h("th", null, "名称"),
 					h("th", null, "现价"),
 					h("th", null, "涨跌幅"),
+					h("th", { title: "近 22 日收盘走势与一句话趋势（5 分钟缓存）" }, "走势"),
 					h("th", { title: "点击单元格设置持仓数量（股）" }, "持仓"),
 					h("th", { title: "点击单元格设置成本价" }, "成本"),
 					h("th", { title: "浮动盈亏（按现价与成本实时计算）" }, "盈亏"),
@@ -542,6 +583,7 @@ export function WatchlistTab({ onOpen, bump }) {
 				null,
 				shown.map((it) => {
 					const q = byCode.get(it.code);
+					const t = trends[it.code];
 					const hasPos = Number(it.qty) > 0 && Number(it.cost) > 0;
 					const px = q?.price;
 					const pl = hasPos && px !== null && px !== void 0 && Number.isFinite(px) ? (px - Number(it.cost)) * Number(it.qty) : null;
@@ -552,6 +594,14 @@ export function WatchlistTab({ onOpen, bump }) {
 						h("td", null, h("span", { className: "lkb-name" }, q?.name || it.name), h("span", { className: "lkb-code" }, it.code)),
 						h("td", { className: trend(q?.change) }, fmt(q?.price)),
 						h("td", { className: trend(q?.change) }, fmtPct(q?.changePct)),
+						h(
+							"td",
+							{ className: "lkb-sparkCell", onClick: (e) => e.stopPropagation(), title: t ? `${t.label}（近 22 日）` : undefined },
+							t && Array.isArray(t.closes) && t.closes.length > 1
+								? h(Sparkline, { closes: t.closes, kind: t.kind })
+								: h("span", { className: "lkb-code" }, "—"),
+							t ? h("span", { className: `lkb-trendHint ${t.kind === "up" ? "lkb-up" : t.kind === "down" ? "lkb-down" : ""}` }, t.label) : null
+						),
 						h(
 							"td",
 							{ onClick: (e) => e.stopPropagation() },

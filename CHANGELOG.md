@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.22.0] - 2026-11-14
+
+### Added
+
+- **自选行「走势」列**（借鉴寰镜 MarketLens 的自选行设计）：22 日收盘微型走势线（SVG 面积渐变 + 端点圆点，红涨绿跌）+ 名下「一句话趋势」小字（强势拉升 / 稳步走高 / 温和走高 / 窄幅盘整 / 小幅回落 / 快速下降 / 加速下挫，方向着色）。判定纯本地（`lib/trend.js`，近 22 日收盘，规则按序短路、模糊行情宁判盘整不硬贴方向）；数据走新路由 `GET /api/leekbox/trend?codes=…`（≤60 只，每只 5 分钟单飞缓存、盘后 TTL×20、上游抖动回吐旧值，8 只一片并发、单只失败静默缺席不拖累整批）。客户端 5 分钟一轮增量刷新，与行情轮询互不干扰。
+
 ## [0.21.1] - 2026-11-14
 
 ### Fixed

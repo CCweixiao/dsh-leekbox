@@ -299,6 +299,11 @@ body[data-ds-dark-theme] .lkb-posTag{background:#4353a340;color:#a5b4fc}
 .lkb-alertItem:last-child{border-bottom:none}
 .lkb-alertCond{color:#4353a3;font-weight:600;font-variant-numeric:tabular-nums;margin-left:auto}
 body[data-ds-dark-theme] .lkb-alertCond{color:#a5b4fc}
+/* 自选行「走势」列:22 日 sparkline + 一句话趋势小字(借鉴寰镜自选行)。 */
+.lkb-sparkCell{white-space:nowrap}
+.lkb-spark{display:block;margin-bottom:2px}
+.lkb-trendHint{display:block;font-size:10.5px;line-height:1.3;font-weight:600}
+.lkb-trendHint:not(.lkb-up):not(.lkb-down){color:var(--dsw-alias-label-tertiary,#a2a7b3)}
 .lkb-alertEmpty{color:var(--dsw-alias-label-tertiary,#a2a7b3);font-size:11.5px;padding:2px 0}
 /* ---- 预警 toast(右下角,可叠 4 条) ---- */
 .lkb-toasts{position:fixed;right:16px;bottom:16px;z-index:2147483647;display:flex;flex-direction:column;gap:8px;max-width:min(420px,86vw)}
