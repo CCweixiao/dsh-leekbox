@@ -158,6 +158,15 @@ console.log("== ⑥ K 线价格轴刻度（纯函数） ==");
 	assert.match(clientSrc.detail, /lkb-maxis/, "刻度文字走 HTML 浮层（与分时图同一套类）");
 	// 命中判定必须扣掉右侧水槽，否则最右侧一根会误判（不锁死括号/空格写法）
 	assert.match(clientSrc.detail, /const vx = [^;]*clientX[^;]*rect\.width[^;]*\* W;/, "K 线命中判定要换算到 viewBox 坐标");
+
+	// 缩放/平移接线：滚轮必须走原生非被动监听（React 合成 wheel 无法
+	// preventDefault），灵敏度系数存在且 ≤1.1（刻意调低，不跟寰镜 1.15），
+	// 有最小可见根数下限与「全览」复位出口。
+	assert.match(clientSrc.detail, /addEventListener\("wheel", onWheel, \{ passive: false \}\)/, "滚轮必须是非被动原生监听");
+	assert.match(clientSrc.detail, /1\.08/, "滚轮灵敏度系数（每格 ±8%）");
+	assert.match(clientSrc.detail, /const MIN_BARS = \d+/, "缩放要有最小可见根数下限");
+	assert.match(clientSrc.detail, /lkb-kzoomReset/, "要有「全览」复位按钮");
+	assert.match(clientSrc.detail, /onDoubleClick: resetView/, "双击回全览");
 	assert.match(clientSrc.detail, /Math\.floor\(vx \/ step\)/, "命中判定按 plotW 的步长");
 	// y 方向不缩放：svg 高度恒等于 viewBox 高度
 	assert.match(clientSrc.detail, /height: H, display: "block"/, "svg 高度固定 = y 向 scale 1（K 线实体不被压扁）");

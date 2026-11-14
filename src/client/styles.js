@@ -265,6 +265,9 @@ body[data-ds-dark-theme] .lkb-progressBar{background:#6378dc}
 body[data-ds-dark-theme] .lkb-kTip{background:#3a3a3c;border-color:#ffffff1f;box-shadow:0 8px 28px #00000066}
 body[data-ds-dark-theme] .lkb-kTip b,body[data-ds-dark-theme] .lkb-kTip .tipDate{color:#f1f1f2}
 .lkb-kwrap{position:relative}
+/* K线缩放后的「全览」复位按钮:右上角浮层,仅在缩放/平移后出现。 */
+.lkb-kzoomReset{position:absolute;top:6px;right:52px;z-index:5;border:1px solid var(--dsw-alias-border-l1,#e0e2e8);background:var(--dsw-alias-bg-overlay,#fff);color:var(--dsw-alias-label-secondary,#5f6672);border-radius:8px;padding:2px 8px;font-size:11px;line-height:1.4;cursor:pointer}
+.lkb-kzoomReset:hover{color:var(--dsw-alias-label-primary,#1c1e26);border-color:var(--dsw-alias-border-l2,#c9ccd6)}
 .lkb-kaxis{position:relative;height:16px;margin-top:3px;font-size:10.5px;color:var(--dsw-alias-label-tertiary,#a2a7b3);font-variant-numeric:tabular-nums}
 .lkb-kaxis span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}
 /* ---- 当日分时图(价格线+均价线+成交量,左右纵轴标签) ---- */

@@ -82,24 +82,86 @@ export function priceAxisTicks(min, max, top, height, count = 4) {
 // 日K/周K/月K + 均线 + 成交量 + 右侧价格轴。
 function KlineChart({ klines }) {
 	const [hover, setHover] = useState(null);
+	// 视窗 {count, offset}:count=可见根数,offset=右端被藏起的根数(0=最新价
+	// 那根可见)。null = 全览。缩放/平移只改这两个数,Y 轴按可见窗口自适应。
+	const [view, setViewState] = useState(null);
 	const kwrapRef = useRef(null);
+	// 拖拽平移起点(mouse only);放 ref 免得拖拽途中重渲染丢状态。
+	const panRef = useRef(null);
+	// 滚轮 rAF 合帧:一帧最多应用一次缩放,多格滚动叠乘不丢。
+	const wheelRaf = useRef(0);
+	// 原生滚监听经它读当前几何(避免每次渲染重挂监听)。
+	const geoRef = useRef({ total: 0, count: 0, offset: 0, plotW: 1 });
 	const W = 900;
 	const PRICE_H = 188;
 	const GAP = 10;
 	const VOL_H = 52;
 	const H = PRICE_H + GAP + VOL_H;
 	const AXIS_W = 46;
+	const MIN_BARS = 10; // 缩放下限:再少就没法看了
+	// 换票/换周期:复位视窗与悬停;并(重)挂原生滚轮监听——React 合成 wheel
+	// 是被动的,preventDefault 阻止页面滚动必须走非被动原生监听(寰镜同款)。
+	useEffect(() => {
+		setViewState(null);
+		setHover(null);
+		panRef.current = null;
+		const wrap = kwrapRef.current;
+		if (wrap === null) return void 0;
+		let pending = null;
+		const flush = () => {
+			wheelRaf.current = 0;
+			const p = pending;
+			pending = null;
+			if (p === null) return;
+			const g = geoRef.current;
+			if (g.total < 2) return;
+			// 灵敏度刻意调低:每格 ±8%(寰镜是 1.15,这里 1.08),不轻易一滚就翻倍。
+			const factor = p.deltaY > 0 ? 1.08 : 1 / 1.08;
+			const minBars = Math.min(MIN_BARS, g.total);
+			const next = Math.min(Math.max(Math.round(g.count * factor), minBars), g.total);
+			if (next === g.count) return;
+			// 光标下的那根 K 线缩放前后保持在同一屏幕位置(锚点缩放)。
+			const anchor = g.total - g.count - g.offset + p.frac * g.count;
+			const newStart = anchor - p.frac * next;
+			setViewState({
+				count: next,
+				offset: Math.min(Math.max(Math.round(g.total - next - newStart), 0), g.total - next),
+			});
+		};
+		const onWheel = (event) => {
+			event.preventDefault();
+			const rect = wrap.getBoundingClientRect();
+			if (rect.width <= 0) return;
+			const vx = (event.clientX - rect.left) / rect.width * W;
+			pending = { deltaY: event.deltaY, frac: Math.max(0, Math.min(1, vx / (W - AXIS_W))) };
+			if (wheelRaf.current === 0) wheelRaf.current = requestAnimationFrame(flush);
+		};
+		wrap.addEventListener("wheel", onWheel, { passive: false });
+		return () => {
+			wrap.removeEventListener("wheel", onWheel);
+			if (wheelRaf.current !== 0) cancelAnimationFrame(wheelRaf.current);
+			wheelRaf.current = 0;
+		};
+	}, [klines]);
 	if (!Array.isArray(klines) || klines.length < 2) return h("div", { className: "lkb-empty" }, "暂无K线数据");
-	const n = klines.length;
+	const total = klines.length;
+	const count = view === null ? total : Math.min(Math.max(Math.round(view.count), Math.min(MIN_BARS, total)), total);
+	const offset = view === null ? 0 : Math.min(Math.max(Math.round(view.offset), 0), total - count);
+	const zoomed = count < total || offset > 0;
+	const start = total - count - offset;
+	const vis = klines.slice(start, start + count);
+	const n = vis.length;
 	const plotW = W - AXIS_W;
 	const step = plotW / n;
 	const xc = (i) => i * step + step / 2;
 	const closes = klines.map((k) => k.close);
 	const mas = MA_DEFS.map((d) => maSeries(closes, d.n));
-	let min = Math.min(...klines.map((k) => k.low));
-	let max = Math.max(...klines.map((k) => k.high));
+	// Y 轴随可见窗口自适应:放大到局部时,那段的涨跌细节才会被拉开。
+	let min = Math.min(...vis.map((k) => k.low));
+	let max = Math.max(...vis.map((k) => k.high));
 	for (const series of mas) {
-		for (const v of series) {
+		for (let i = start; i < start + n; i++) {
+			const v = series[i];
 			if (v !== null) {
 				if (v < min) min = v;
 				if (v > max) max = v;
@@ -114,45 +176,81 @@ function KlineChart({ klines }) {
 	min -= pad;
 	max += pad;
 	const py = (v) => 4 + (1 - (v - min) / (max - min)) * (PRICE_H - 8);
-	const maxVol = Math.max(...klines.map((k) => k.volume)) || 1;
+	const maxVol = Math.max(...vis.map((k) => k.volume)) || 1;
 	const volBase = PRICE_H + GAP + VOL_H - 2;
 	const vh = (v) => Math.max(1, v / maxVol * (VOL_H - 6));
 	const bodyW = Math.max(1.5, Math.min(step * 0.64, 12));
-	const barColor = (i) => klines[i].close >= klines[i].open ? UP_COLOR : DOWN_COLOR;
-	const hi = hover === null ? n - 1 : Math.min(Math.max(hover.i, 0), n - 1);
-	const hb = klines[hi];
-	const hPrev = hi > 0 ? klines[hi - 1].close : hb.open;
+	const barColor = (i) => vis[i].close >= vis[i].open ? UP_COLOR : DOWN_COLOR;
+	// hover.i 是全数组的绝对下标(提示窗的 MA 值与支撑/压力位要回看全量)。
+	const absHi = hover === null ? start + n - 1 : Math.min(Math.max(hover.i, start), start + n - 1);
+	const locHi = absHi - start;
+	const hb = klines[absHi];
+	const hPrev = absHi > 0 ? klines[absHi - 1].close : hb.open;
 	const hPct = hPrev ? (hb.close - hPrev) / hPrev * 100 : null;
-	const sr = srLevels(klines, hi);
+	const sr = srLevels(klines, absHi);
 	const onMove = (e) => {
+		if (panRef.current !== null) return; // 拖拽平移期间不追十字线
 		const rect = e.currentTarget.getBoundingClientRect();
 		if (rect.width <= 0) return;
 		const vx = (e.clientX - rect.left) / rect.width * W;
-		const i = Math.min(Math.max(Math.floor(vx / step), 0), n - 1);
+		const i = start + Math.min(Math.max(Math.floor(vx / step), 0), n - 1);
 		setHover({ i, x: e.clientX - rect.left, y: e.clientY - rect.top });
 	};
+	const onPanDown = (e) => {
+		if (e.pointerType !== "mouse" || e.button !== 0) return;
+		panRef.current = { x0: e.clientX, offset0: offset };
+	};
+	const onPanMove = (e) => {
+		const pan = panRef.current;
+		if (pan === null) return;
+		// 往右拖 = 看更早的K线(窗口左移,offset 增大)。
+		const shift = Math.round((e.clientX - pan.x0) / step);
+		const next = Math.min(Math.max(pan.offset0 + shift, 0), total - count);
+		if (next !== offset) setViewState({ count, offset: next });
+	};
+	const onPanUp = () => {
+		panRef.current = null;
+	};
+	const resetView = () => {
+		setViewState(null);
+	};
+	geoRef.current = { total, count, offset, plotW };
 	const gridYs = [0, 1 / 3, 2 / 3, 1].map((f) => 4 + f * (PRICE_H - 8));
 	const axisTicks = priceAxisTicks(min, max, 4, PRICE_H - 8, 4);
-	const ticks = [...new Set(Array.from({ length: 6 }, (_, k) => Math.round(k * (n - 1) / 5)))];
+	const ticks = Array.from({ length: 6 }, (_, k) => start + Math.round((k * (n - 1)) / 5));
 	const tipW = 168;
 	const tipH = 196;
 	const wrapW = kwrapRef.current !== null && kwrapRef.current.clientWidth > 0 ? kwrapRef.current.clientWidth : W;
 	const tipLeft = hover === null ? 0 : hover.x + 14 + tipW > wrapW ? Math.max(0, hover.x - 14 - tipW) : hover.x + 14;
 	const tipTop = hover === null ? 0 : hover.y + 14 + tipH > H ? Math.max(0, hover.y - 14 - tipH) : hover.y + 14;
+	const lastBar = klines[total - 1];
 	return h(
 		"div",
 		null,
 		h(
 			"div",
-			{ className: "lkb-kwrap", ref: kwrapRef, onMouseMove: onMove, onMouseLeave: () => setHover(null) },
+			{
+				className: "lkb-kwrap",
+				ref: kwrapRef,
+				onMouseMove: onMove,
+				onMouseLeave: () => {
+					if (panRef.current === null) setHover(null);
+				},
+				onPointerDown: onPanDown,
+				onPointerMove: onPanMove,
+				onPointerUp: onPanUp,
+				onPointerCancel: onPanUp,
+				onDoubleClick: resetView,
+				title: "滚轮缩放（以光标为锚）· 拖拽平移 · 双击回全览",
+				style: zoomed ? { cursor: "grab" } : undefined,
+			},
 			h(
 				"svg",
 				{ viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", style: { width: "100%", height: H, display: "block" } },
 				gridYs.map(
 					(y, gi) => h("line", { key: "g" + gi, x1: 0, x2: plotW, y1: y, y2: y, stroke: "var(--dsw-alias-border-l1,#eceef1)", strokeWidth: 0.6, vectorEffect: "non-scaling-stroke" })
 				),
-				klines.map((_, i) => {
-					const b = klines[i];
+				vis.map((b, i) => {
 					const color = barColor(i);
 					const x = xc(i);
 					const yO = py(b.open);
@@ -161,27 +259,28 @@ function KlineChart({ klines }) {
 					const bh = Math.max(1, Math.abs(yO - yC));
 					return h(
 						"g",
-						{ key: i },
+						{ key: start + i },
 						h("line", { x1: x, x2: x, y1: py(b.high), y2: py(b.low), stroke: color, strokeWidth: 1, vectorEffect: "non-scaling-stroke" }),
 						h("rect", { x: x - bodyW / 2, y: top, width: bodyW, height: bh, fill: color })
 					);
 				}),
 				mas.map((series, mi) => {
 					const pts = [];
-					for (let i = 0; i < n; i++) if (series[i] !== null) pts.push(`${xc(i).toFixed(1)},${py(series[i]).toFixed(1)}`);
+					for (let i = start; i < start + n; i++) if (series[i] !== null) pts.push(`${xc(i - start).toFixed(1)},${py(series[i]).toFixed(1)}`);
 					return pts.length > 1 ? h("polyline", { key: "ma" + mi, points: pts.join(" "), fill: "none", stroke: MA_DEFS[mi].color, strokeWidth: 1.1, vectorEffect: "non-scaling-stroke", opacity: 0.95 }) : null;
 				}),
-				h("line", {
+				// 最新价虚线:只在最新一根可见(右端贴齐)时有意义。
+				offset === 0 ? h("line", {
 					x1: 0,
 					x2: plotW,
-					y1: py(klines[n - 1].close),
-					y2: py(klines[n - 1].close),
-					stroke: barColor(n - 1),
+					y1: py(lastBar.close),
+					y2: py(lastBar.close),
+					stroke: lastBar.close >= lastBar.open ? UP_COLOR : DOWN_COLOR,
 					strokeDasharray: "5 4",
 					strokeWidth: 0.8,
 					vectorEffect: "non-scaling-stroke",
 					opacity: 0.8
-				}),
+				}) : null,
 				h("line", { x1: 0, x2: plotW, y1: PRICE_H + GAP / 2, y2: PRICE_H + GAP / 2, stroke: "var(--dsw-alias-border-l1,#eceef1)", strokeWidth: 0.6, vectorEffect: "non-scaling-stroke" }),
 				// 右侧价格轴：只画基准竖线与短刻度线。价位**文字**走下面的 HTML
 				// 浮层（`.lkb-maxis`）——svg 是 preserveAspectRatio="none"，文字会被
@@ -191,9 +290,9 @@ function KlineChart({ klines }) {
 				axisTicks.map(
 					(t, ti) => h("line", { key: "ax" + ti, x1: plotW, x2: plotW + 4, y1: t.y, y2: t.y, stroke: "var(--dsw-alias-border-l1,#b7bcc7)", strokeWidth: 0.6, vectorEffect: "non-scaling-stroke" })
 				),
-				klines.map(
+				vis.map(
 					(k, i) => h("rect", {
-						key: "v" + i,
+						key: "v" + (start + i),
 						x: xc(i) - bodyW / 2,
 						y: volBase - vh(k.volume),
 						width: bodyW,
@@ -202,8 +301,13 @@ function KlineChart({ klines }) {
 						opacity: 0.55
 					})
 				),
-				hover !== null && hover.i >= 0 && hover.i < n ? h("line", { x1: xc(hover.i), x2: xc(hover.i), y1: 2, y2: volBase, stroke: "#868e96", strokeDasharray: "4 3", strokeWidth: 0.8, vectorEffect: "non-scaling-stroke" }) : null
+				hover !== null ? h("line", { x1: xc(locHi), x2: xc(locHi), y1: 2, y2: volBase, stroke: "#868e96", strokeDasharray: "4 3", strokeWidth: 0.8, vectorEffect: "non-scaling-stroke" }) : null
 			),
+			zoomed ? h(
+				"button",
+				{ className: "lkb-kzoomReset", onClick: (e) => { e.stopPropagation(); resetView(); }, title: "回到全部K线" },
+				"⤢ 全览"
+			) : null,
 			// 价格轴文字浮层（HTML，避免被 svg 横向拉伸）
 			h(
 				"div",
@@ -228,7 +332,7 @@ function KlineChart({ klines }) {
 				h("b", null, fmtVol(hb.volume)),
 				mas.flatMap((series, mi) => [
 					h("span", { className: "ma" + MA_DEFS[mi].n, key: "m" + MA_DEFS[mi].n }, `MA${MA_DEFS[mi].n}`),
-					h("b", { key: "v" + MA_DEFS[mi].n, className: "ma" + MA_DEFS[mi].n }, series[hi] === null ? "—" : fmt(series[hi]))
+					h("b", { key: "v" + MA_DEFS[mi].n, className: "ma" + MA_DEFS[mi].n }, series[absHi] === null ? "—" : fmt(series[absHi]))
 				]),
 				h("span", { className: "srRes" }, "压力位"),
 				h("b", { className: "srRes" }, fmt(sr.res)),
@@ -239,7 +343,7 @@ function KlineChart({ klines }) {
 				"div",
 				{ className: "lkb-kaxis" },
 				ticks.map(
-					(ti) => h("span", { key: ti, style: { left: `${Math.min(96, Math.max(4, xc(ti) / plotW * 100))}%` } }, shortDate(klines[ti]?.date))
+					(ti, k) => h("span", { key: `${k}-${ti}`, style: { left: `${Math.min(96, Math.max(4, xc(ti - start) / plotW * 100))}%` } }, shortDate(klines[ti]?.date))
 				)
 			)
 		)
